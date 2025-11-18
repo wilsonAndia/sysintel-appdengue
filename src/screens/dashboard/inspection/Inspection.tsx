@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -15,21 +15,22 @@ import {
 import tw from '../../../../tailwind';
 import * as ImagePicker from 'react-native-image-picker';
 import Geolocation from '@react-native-community/geolocation';
-import {launchCamera, CameraOptions} from 'react-native-image-picker';
+import { launchCamera, CameraOptions } from 'react-native-image-picker';
 import Navbar from '../../../components/NavBar';
-import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {NavigationProp} from '../../../helpers/types/navigationProp';
-import {ButtonRegresar} from '../../../helpers/ButtonRegresar';
+import { NavigationProp } from '../../../helpers/types/navigationProp';
+import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
 import Video from 'react-native-video';
 import ImageViewer from 'react-native-image-viewing';
 import ToggleButton from '../../../helpers/ToggleButton';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
-import {useSelector} from 'react-redux';
-import {RootState} from '../../../redux/store';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../redux/store';
+import { API_URL } from '@env';
 type InspectionRouteProp = RouteProp<
-  {Inspection: {houseId: string}},
+  { Inspection: { houseId: string } },
   'Inspection'
 >;
 
@@ -59,7 +60,7 @@ interface InspectionData {
 const Inspection: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<InspectionRouteProp>();
-  const {houseId} = route.params;
+  const { houseId } = route.params;
   const selectedZoneRedux = useSelector(
     (state: RootState) => state.zones.selectedZone,
   );
@@ -97,7 +98,7 @@ const Inspection: React.FC = () => {
     null,
   );
 
-  const {width, height} = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   const getLocation = async () => {
     Geolocation.getCurrentPosition(
@@ -109,7 +110,7 @@ const Inspection: React.FC = () => {
         Alert.alert('Erro', 'Não foi possível obter a localização atual.');
         console.log('Error:', error);
       },
-      {enableHighAccuracy: false, timeout: 20000, maximumAge: 1000},
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 1000 },
     );
   };
 
@@ -125,7 +126,7 @@ const Inspection: React.FC = () => {
 
     const body = {
       someoneAtHome: true,
-      house: {id: houseId},
+      house: { id: houseId },
       startTime: startISO,
       latitude,
       longitude,
@@ -163,7 +164,7 @@ const Inspection: React.FC = () => {
 
     const body = {
       someoneAtHome: false,
-      house: {id: houseId},
+      house: { id: houseId },
       startTime: now,
       endTime: now,
       latitude,
@@ -172,21 +173,18 @@ const Inspection: React.FC = () => {
       idGroupVisit: selectedZoneRedux?.visitId,
     };
 
-    await fetchAxiosToken({url: 'inspections/start', method: 'post', body});
+    await fetchAxiosToken({ url: 'inspections/start', method: 'post', body });
     Alert.alert('Sucesso', 'Inspeção registrada (sem moradores).');
-    navigation.navigate('HouseInspections', {id: houseId});
+    navigation.navigate('HouseInspections', { id: houseId });
   };
 
   const getPresignedUrl = async (fileName: string, mimeType: string) => {
     const token = await AsyncStorage.getItem('token');
-    const res = await axios.get(
-      `${process.env.API_URL}inspections/media/upload-url`,
-      {
-        params: {fileName, contentType: mimeType},
-        headers: {Authorization: `Bearer ${token}`},
-      },
-    );
-    return res.data as {url: string; key: string};
+    const res = await axios.get(`${API_URL}inspections/media/upload-url`, {
+      params: { fileName, contentType: mimeType },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data as { url: string; key: string };
   };
 
   const uploadToS3 = async (
@@ -200,7 +198,7 @@ const Inspection: React.FC = () => {
     try {
       const result = await fetch(signedUrl, {
         method: 'PUT',
-        headers: {'Content-Type': mimeType},
+        headers: { 'Content-Type': mimeType },
         body: blob,
       });
 
@@ -228,7 +226,7 @@ const Inspection: React.FC = () => {
       }> = [];
 
       for (const file of mediaFiles) {
-        const {url: signedUrl, key} = await getPresignedUrl(
+        const { url: signedUrl, key } = await getPresignedUrl(
           file.name,
           file.type,
         );
@@ -296,7 +294,7 @@ const Inspection: React.FC = () => {
       });
 
       Alert.alert('Sucesso', 'Inspeção realizada com sucesso!');
-      navigation.navigate('HouseInspections', {id: houseId});
+      navigation.navigate('HouseInspections', { id: houseId });
     } catch (error) {
       console.error(error);
       Alert.alert('Erro', 'Houve um problema ao realizar a inspeção.');
@@ -321,7 +319,7 @@ const Inspection: React.FC = () => {
         await new Promise<void>((resolve, reject) => {
           Geolocation.getCurrentPosition(
             position => {
-              const {latitude, longitude} = position.coords;
+              const { latitude, longitude } = position.coords;
 
               setPreviewFile({
                 uri: file.uri!,
@@ -343,7 +341,7 @@ const Inspection: React.FC = () => {
               console.log('Error:', error);
               reject(error);
             },
-            {enableHighAccuracy: false, timeout: 20000, maximumAge: 1000},
+            { enableHighAccuracy: false, timeout: 20000, maximumAge: 1000 },
           );
         });
       }
@@ -364,7 +362,7 @@ const Inspection: React.FC = () => {
     if (previewFile) {
       setMediaFiles(prev => [
         ...prev,
-        {...previewFile, larvaeDetails: tempLarvaeDetails.trim()},
+        { ...previewFile, larvaeDetails: tempLarvaeDetails.trim() },
       ]);
       setPreviewFile(null);
       setTempLarvaeDetails('');
@@ -389,7 +387,8 @@ const Inspection: React.FC = () => {
             <>
               <TouchableOpacity
                 style={tw`p-3 mb-4 bg-blue-sysintel-900 rounded-lg`}
-                onPress={startInspection}>
+                onPress={startInspection}
+              >
                 <Text style={tw`font-bold text-center text-white`}>
                   Realizar Inspeção
                 </Text>
@@ -397,7 +396,8 @@ const Inspection: React.FC = () => {
 
               <TouchableOpacity
                 style={tw`p-3 bg-red-500 rounded-lg`}
-                onPress={noOneAtHome}>
+                onPress={noOneAtHome}
+              >
                 <Text style={tw`font-bold text-center text-white`}>
                   Não havia ninguém
                 </Text>
@@ -434,7 +434,8 @@ const Inspection: React.FC = () => {
 
               <View style={tw`mb-4 `}>
                 <Text
-                  style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
+                  style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}
+                >
                   Casa em Construção:
                 </Text>
                 <View style={tw`flex-row items-center gap-4`}>
@@ -474,13 +475,15 @@ const Inspection: React.FC = () => {
                         ? prev.filter(c => c !== option)
                         : [...prev, option],
                     )
-                  }>
+                  }
+                >
                   <Text
                     style={tw`text-center ${
                       buildingCharacteristics.includes(option)
                         ? 'text-white'
                         : 'text-blue-sysintel-900'
-                    }`}>
+                    }`}
+                  >
                     {option}
                   </Text>
                 </TouchableOpacity>
@@ -488,7 +491,8 @@ const Inspection: React.FC = () => {
 
               <View style={tw`mb-4 `}>
                 <Text
-                  style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
+                  style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}
+                >
                   Possui Animais:
                 </Text>
                 <View style={tw`flex-row items-center gap-4`}>
@@ -503,7 +507,8 @@ const Inspection: React.FC = () => {
               {hasPets && (
                 <>
                   <Text
-                    style={tw`mb-2 text-lg font-bold text-blue-sysintel-800`}>
+                    style={tw`mb-2 text-lg font-bold text-blue-sysintel-800`}
+                  >
                     Tipo de Animais
                   </Text>
                   {['Cães', 'Gatos', 'Pássaros', 'Répteis', 'Outros'].map(
@@ -521,13 +526,15 @@ const Inspection: React.FC = () => {
                               ? prev.filter(c => c !== option)
                               : [...prev, option],
                           )
-                        }>
+                        }
+                      >
                         <Text
                           style={tw`text-center ${
                             petTypes.includes(option)
                               ? 'text-white'
                               : 'text-blue-sysintel-900'
-                          }`}>
+                          }`}
+                        >
                           {option}
                         </Text>
                       </TouchableOpacity>
@@ -538,7 +545,8 @@ const Inspection: React.FC = () => {
 
               <View style={tw`mb-4 `}>
                 <Text
-                  style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
+                  style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}
+                >
                   Possui Piscina:
                 </Text>
                 <View style={tw`flex-row items-center gap-4`}>
@@ -553,7 +561,8 @@ const Inspection: React.FC = () => {
               {hasPool && (
                 <>
                   <Text
-                    style={tw`mb-2 text-lg font-bold text-blue-sysintel-800`}>
+                    style={tw`mb-2 text-lg font-bold text-blue-sysintel-800`}
+                  >
                     Condições da Piscina
                   </Text>
                   {[
@@ -576,13 +585,15 @@ const Inspection: React.FC = () => {
                             ? prev.filter(c => c !== option)
                             : [...prev, option],
                         )
-                      }>
+                      }
+                    >
                       <Text
                         style={tw`text-center ${
                           poolCondition.includes(option)
                             ? 'text-white'
                             : 'text-blue-sysintel-900'
-                        }`}>
+                        }`}
+                      >
                         {option}
                       </Text>
                     </TouchableOpacity>
@@ -620,7 +631,8 @@ const Inspection: React.FC = () => {
                               ...prev,
                               [neighbor]: option,
                             }));
-                          }}>
+                          }}
+                        >
                           <Text
                             style={tw`text-center ${
                               neighborCharacteristics[neighbor]?.includes(
@@ -628,7 +640,8 @@ const Inspection: React.FC = () => {
                               )
                                 ? 'text-white'
                                 : 'text-blue-sysintel-900 '
-                            }`}>
+                            }`}
+                          >
                             {option}
                           </Text>
                         </TouchableOpacity>
@@ -657,14 +670,16 @@ const Inspection: React.FC = () => {
                                 ...prev,
                                 [neighbor]: `Residência - ${subOption}`,
                               }))
-                            }>
+                            }
+                          >
                             <Text
                               style={tw`text-center ${
                                 neighborCharacteristics[neighbor] ===
                                 `Residência - ${subOption}`
                                   ? 'text-white'
                                   : 'text-black'
-                              }`}>
+                              }`}
+                            >
                               {subOption}
                             </Text>
                           </TouchableOpacity>
@@ -677,7 +692,8 @@ const Inspection: React.FC = () => {
 
               <View style={tw`mb-4 `}>
                 <Text
-                  style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
+                  style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}
+                >
                   Focos de Dengue:
                 </Text>
                 <View style={tw`flex-row items-center gap-4`}>
@@ -695,13 +711,15 @@ const Inspection: React.FC = () => {
                 <>
                   <TouchableOpacity
                     style={tw`p-2 mb-2 bg-blue-sysintel-800 rounded-lg`}
-                    onPress={() => openCamera('photo')}>
+                    onPress={() => openCamera('photo')}
+                  >
                     <Text style={tw`text-center text-white`}>Tirar Foto</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={tw`p-2 rounded-lg bg-blue-sysintel-800`}
-                    onPress={() => openCamera('video')}>
+                    onPress={() => openCamera('video')}
+                  >
                     <Text style={tw`text-center text-white`}>Gravar Vídeo</Text>
                   </TouchableOpacity>
                 </>
@@ -716,15 +734,17 @@ const Inspection: React.FC = () => {
                     setPreviewType(
                       file.type.startsWith('image') ? 'image' : 'video',
                     );
-                  }}>
+                  }}
+                >
                   {file.type.startsWith('image') ? (
                     <Image
-                      source={{uri: file.uri}}
+                      source={{ uri: file.uri }}
                       style={tw`w-16 h-16 rounded-lg`}
                     />
                   ) : (
                     <View
-                      style={tw`items-center justify-center w-16 h-16 bg-black rounded-lg`}>
+                      style={tw`items-center justify-center w-16 h-16 bg-black rounded-lg`}
+                    >
                       <Text style={tw`text-xs text-white`}>🎥 Vídeo</Text>
                     </View>
                   )}
@@ -741,7 +761,8 @@ const Inspection: React.FC = () => {
               <TouchableOpacity
                 style={tw`p-3 mt-4 bg-blue-sysintel-900 rounded-lg`}
                 onPress={() => sendInspection(true)}
-                disabled={loading}>
+                disabled={loading}
+              >
                 {loading ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
@@ -757,7 +778,7 @@ const Inspection: React.FC = () => {
 
       {previewType === 'image' && previewIndex !== null && (
         <ImageViewer
-          images={[{uri: mediaFiles[previewIndex].uri}]}
+          images={[{ uri: mediaFiles[previewIndex].uri }]}
           imageIndex={0}
           visible={true}
           onRequestClose={() => setPreviewIndex(null)}
@@ -769,14 +790,16 @@ const Inspection: React.FC = () => {
           transparent
           animationType="slide"
           visible={true}
-          onRequestClose={() => setPreviewIndex(null)}>
+          onRequestClose={() => setPreviewIndex(null)}
+        >
           <TouchableOpacity
             style={tw`flex-1 bg-black`}
             onPress={() => setPreviewIndex(null)}
-            activeOpacity={1}>
+            activeOpacity={1}
+          >
             <Video
-              source={{uri: mediaFiles[previewIndex].uri}}
-              style={{width, height}}
+              source={{ uri: mediaFiles[previewIndex].uri }}
+              style={{ width, height }}
               controls
               resizeMode="contain"
             />
@@ -796,7 +819,8 @@ const Inspection: React.FC = () => {
 
             <TouchableOpacity
               style={tw`p-2 bg-blue-sysintel-900 rounded-lg`}
-              onPress={saveMediaFile}>
+              onPress={saveMediaFile}
+            >
               <Text style={tw`text-center text-white`}>Salvar</Text>
             </TouchableOpacity>
           </View>

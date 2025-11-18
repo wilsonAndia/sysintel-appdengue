@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -11,13 +11,14 @@ import {
 } from 'react-native';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
-import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
-import {ButtonRegresar} from '../../../helpers/ButtonRegresar';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
 import Video from 'react-native-video';
+import { API_URL } from '@env';
 
 type InspectionDetailRouteProp = RouteProp<
-  {InspectionDetail: {id: string}},
+  { InspectionDetail: { id: string } },
   'InspectionDetail'
 >;
 
@@ -65,7 +66,7 @@ interface Inspection {
 const InspectionDetail: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<InspectionDetailRouteProp>();
-  const {id} = route.params;
+  const { id } = route.params;
 
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -118,7 +119,7 @@ const InspectionDetail: React.FC = () => {
         return '';
       }
     } else {
-      return `${process.env.API_URL}inspections/getImage/${media.url}`;
+      return `${API_URL}inspections/getImage/${media.url}`;
     }
   };
 
@@ -235,18 +236,20 @@ const InspectionDetail: React.FC = () => {
                   <View key={media.id} style={tw`flex-row items-center mb-4`}>
                     <TouchableOpacity
                       onPress={() => handleOpenMedia(media)}
-                      style={tw`mr-4`}>
+                      style={tw`mr-4`}
+                    >
                       {media.type === 'image' ? (
                         <Image
                           source={{
-                            uri: `${process.env.API_URL}inspections/getImage/${media.url}`,
+                            uri: `${API_URL}inspections/getImage/${media.url}`,
                           }}
                           style={tw`w-32 h-32 rounded-lg`}
                           resizeMode="cover"
                         />
                       ) : (
                         <View
-                          style={tw`items-center justify-center w-32 h-32 bg-black rounded-lg`}>
+                          style={tw`items-center justify-center w-32 h-32 bg-black rounded-lg`}
+                        >
                           <Text style={tw`text-sm text-white`}>
                             Assista ao vídeo
                           </Text>
@@ -269,13 +272,13 @@ const InspectionDetail: React.FC = () => {
             <ActivityIndicator size="large" color="#fff" />
           ) : selectedMedia?.type === 'image' ? (
             <Image
-              source={{uri: mediaUrl}}
+              source={{ uri: mediaUrl }}
               style={tw`w-full h-full`}
               resizeMode="contain"
             />
           ) : selectedMedia?.type === 'video' ? (
             <Video
-              source={{uri: mediaUrl}}
+              source={{ uri: mediaUrl }}
               style={tw`w-full h-full`}
               resizeMode="contain"
               controls={true}
@@ -287,7 +290,8 @@ const InspectionDetail: React.FC = () => {
               setSelectedMedia(null);
               setMediaUrl('');
             }}
-            style={tw`absolute p-2 bg-red-500 rounded-full top-10 right-10`}>
+            style={tw`absolute p-2 bg-red-500 rounded-full top-10 right-10`}
+          >
             <Text style={tw`text-white`}>Fechar</Text>
           </TouchableOpacity>
         </View>

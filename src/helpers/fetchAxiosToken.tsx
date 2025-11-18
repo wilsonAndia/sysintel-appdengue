@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '@env';
 
 interface Props {
   url: string;
@@ -14,8 +15,8 @@ export const fetchAxiosToken = async ({
   body,
   subdomain,
   isFormData = false,
-}: Props & {subdomain?: string}) => {
-  const BASE_URL = process.env.API_URL;
+}: Props & { subdomain?: string }) => {
+  const BASE_URL = API_URL;
   let token = await AsyncStorage.getItem('token');
 
   const headers = {
@@ -24,7 +25,7 @@ export const fetchAxiosToken = async ({
   };
   /*   console.log(headers); */
   /* console.log(`${BASE_URL}${url}`); */
-  const {data} = await axios({
+  const { data } = await axios({
     method: method || 'get',
     url: `${BASE_URL}${url}`,
     data: body || '',

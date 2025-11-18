@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -13,14 +13,14 @@ import {
 } from 'react-native';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
-import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import {
   NavigationProp,
   RootStackParamList,
 } from '../../../helpers/types/navigationProp';
-import {ButtonRegresar} from '../../../helpers/ButtonRegresar';
-
+import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
+import { API_URL } from '@env';
 interface User {
   id: string;
   firstName: string;
@@ -34,7 +34,7 @@ type GroupDetailRouteProp = RouteProp<RootStackParamList, 'GroupDetail'>;
 const GroupDetail = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<GroupDetailRouteProp>();
-  const {id} = route.params;
+  const { id } = route.params;
 
   const [groupName, setGroupName] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -198,7 +198,8 @@ const GroupDetail = () => {
         />
         <TouchableOpacity
           onPress={handleSearch}
-          style={tw`ml-2 px-4 py-2 bg-[#003366] rounded-lg`}>
+          style={tw`ml-2 px-4 py-2 bg-[#003366] rounded-lg`}
+        >
           <Text style={tw`font-bold text-white`}>Buscar</Text>
         </TouchableOpacity>
       </View>
@@ -210,13 +211,14 @@ const GroupDetail = () => {
         <FlatList
           data={users}
           keyExtractor={user => user.id}
-          renderItem={({item: user}) => (
+          renderItem={({ item: user }) => (
             <TouchableOpacity
               style={tw`flex-row items-center px-4 mb-2`}
-              onPress={() => addMember(user)}>
+              onPress={() => addMember(user)}
+            >
               <Image
                 source={{
-                  uri: `${process.env.API_URL}users/getImage/${user.avatar}`,
+                  uri: `${API_URL}users/getImage/${user.avatar}`,
                 }}
                 style={tw`w-10 h-10 mr-4 rounded-full`}
                 resizeMode="cover"
@@ -246,19 +248,22 @@ const GroupDetail = () => {
               key={member.id}
               style={tw`flex-row items-center justify-between mb-2 p-2 ${
                 leaderId === member.id ? 'bg-green-100' : 'bg-blue-100'
-              } rounded-lg`}>
+              } rounded-lg`}
+            >
               <Text style={tw`text-gray-700`}>
                 {member.firstName} {member.lastName}
               </Text>
               <View style={tw`flex-row items-center`}>
                 <TouchableOpacity
                   onPress={() => selectLeader(member.id)}
-                  style={tw`p-1 px-2 bg-green-500 rounded-lg`}>
+                  style={tw`p-1 px-2 bg-green-500 rounded-lg`}
+                >
                   <Text style={tw`text-white`}>Líder</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => removeMember(member.id)}
-                  style={tw`p-1 px-2 ml-2 bg-red-500 rounded-lg`}>
+                  style={tw`p-1 px-2 ml-2 bg-red-500 rounded-lg`}
+                >
                   <Text style={tw`text-white`}>X</Text>
                 </TouchableOpacity>
               </View>
@@ -270,7 +275,8 @@ const GroupDetail = () => {
       <TouchableOpacity
         style={tw`p-3 mt-2 mb-4 bg-[#003366] mx-4 rounded-lg`}
         onPress={handleUpdate}
-        disabled={loading}>
+        disabled={loading}
+      >
         {loading ? (
           <Text style={tw`font-bold text-center text-white`}>Salvando...</Text>
         ) : (

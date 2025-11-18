@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,24 +10,29 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import {useWindowDimensions} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
-import {Circle, Line, Path, Svg} from 'react-native-svg';
+import { useWindowDimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Circle, Line, Path, Svg } from 'react-native-svg';
 import tw from '../../tailwind';
-import {NavigationProp} from '../helpers/types/navigationProp';
-import {useNavigation} from '@react-navigation/native';
-import {useDispatch, useSelector} from 'react-redux';
-import {clearToken} from '../redux/authSlice';
-import {RootState} from '../redux/store';
-import {clearSelectedZone, setSelectedZone, Zone} from '../redux/zonesSlice';
-import {fetchAxiosToken} from '../helpers/fetchAxiosToken';
+import { NavigationProp } from '../helpers/types/navigationProp';
+import { useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import { clearToken } from '../redux/authSlice';
+import { RootState } from '../redux/store';
+import { clearSelectedZone, setSelectedZone, Zone } from '../redux/zonesSlice';
+import { fetchAxiosToken } from '../helpers/fetchAxiosToken';
 
-import {ScrollView} from 'react-native-gesture-handler';
+import { ScrollView } from 'react-native-gesture-handler';
 
 import Geolocation from '@react-native-community/geolocation';
 
-import {Linking, Platform} from 'react-native';
-import {requestLocationPermission} from '../screens/dashboard/inspection/HouseInspection';
+import { Linking, Platform } from 'react-native';
+
+import { API_URL } from '@env';
+import {
+  openAppSettings,
+  requestLocationPermission,
+} from '../helpers/requestLocation';
 
 type GeoPosition = {
   coords: {
@@ -51,7 +56,8 @@ let MENU = [
         style={tw`h-7 w-7 text-blue-sysintel-100`}
         fill="none"
         viewBox="0 0 24 24"
-        stroke="currentColor">
+        stroke="currentColor"
+      >
         <Path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -70,7 +76,8 @@ let MENU = [
         style={tw`h-7 w-7 text-blue-sysintel-100`}
         fill="none"
         viewBox="0 0 24 24"
-        stroke="currentColor">
+        stroke="currentColor"
+      >
         <Path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -83,7 +90,7 @@ let MENU = [
 ];
 
 const Navbar: React.FC = () => {
-  const {width, height} = useWindowDimensions(); // Para saber el ancho de la pantalla
+  const { width, height } = useWindowDimensions(); // Para saber el ancho de la pantalla
   const [isOpen, setIsOpen] = useState(false);
   const slideAnim = useState(new Animated.Value(-width))[0]; // Posición inicial fuera de la pantalla
   const navigation = useNavigation<NavigationProp>();
@@ -103,12 +110,21 @@ const Navbar: React.FC = () => {
   const checkIfLocationIsEnabled = async (): Promise<boolean> => {
     console.log('Entrando a checkIfLocationIsEnabled...');
 
-    const hasPermission = await requestLocationPermission();
-    if (!hasPermission) {
-      console.log('No tiene permiso de ubicación');
+    const result = await requestLocationPermission();
+
+    if (result === 'blocked') {
+      console.log('PERMISO BLOQUEADO — ir a ajustes');
+
+      setShowGpsModal(true); // Abres el modal para enviar al usuario a Configuración
       return false;
     }
-    console.log(hasPermission);
+
+    if (result === 'denied') {
+      console.log('PERMISO NEGADO — intentar otra vez');
+      return false;
+    }
+
+    // granted
     try {
       const position = await new Promise<GeoPosition | null>(resolve => {
         Geolocation.getCurrentPosition(
@@ -117,35 +133,66 @@ const Navbar: React.FC = () => {
             resolve(pos as GeoPosition);
           },
           error => {
-            console.log('este es el error', error);
-            if (error.code === 1) {
-              console.log(
-                'PERMISSION_DENIED: No se dieron permisos de ubicación',
-              );
-            } else if (error.code === 2) {
-              console.log(
-                'POSITION_UNAVAILABLE: El GPS está desactivado o sin señal',
-              );
-            } else if (error.code === 3) {
-              console.log('TIMEOUT: No se pudo obtener ubicación a tiempo');
-            }
-
-            resolve(null); // nunca lances, siempre resuelve
+            console.log('Error obteniendo ubicación:', error);
+            resolve(null);
           },
-          {
-            enableHighAccuracy: false,
-            timeout: 20000, // 10 segundos
-            maximumAge: 1000,
-          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
         );
       });
 
       return position !== null;
-    } catch (e) {
-      console.log('Unexpected error in checkIfLocationIsEnabled:', e);
+    } catch (err) {
+      console.log('Unexpected error:', err);
       return false;
     }
   };
+
+  // const checkIfLocationIsEnabled = async (): Promise<boolean> => {
+  //   console.log('Entrando a checkIfLocationIsEnabled...');
+
+  //   const hasPermission = await requestLocationPermission();
+  //   if (!hasPermission) {
+  //     console.log('No tiene permiso de ubicación');
+  //     return false;
+  //   }
+  //   console.log(hasPermission);
+  //   try {
+  //     const position = await new Promise<GeoPosition | null>(resolve => {
+  //       Geolocation.getCurrentPosition(
+  //         pos => {
+  //           console.log('Ubicación obtenida:', pos.coords);
+  //           resolve(pos as GeoPosition);
+  //         },
+  //         error => {
+  //           console.log('este es el error', error);
+  //           if (error.code === 1) {
+  //             console.log(
+  //               'PERMISSION_DENIED: No se dieron permisos de ubicación',
+  //             );
+  //           } else if (error.code === 2) {
+  //             console.log(
+  //               'POSITION_UNAVAILABLE: El GPS está desactivado o sin señal',
+  //             );
+  //           } else if (error.code === 3) {
+  //             console.log('TIMEOUT: No se pudo obtener ubicación a tiempo');
+  //           }
+
+  //           resolve(null); // nunca lances, siempre resuelve
+  //         },
+  //         {
+  //           enableHighAccuracy: false,
+  //           timeout: 20000, // 10 segundos
+  //           maximumAge: 1000,
+  //         },
+  //       );
+  //     });
+
+  //     return position !== null;
+  //   } catch (e) {
+  //     console.log('Unexpected error in checkIfLocationIsEnabled:', e);
+  //     return false;
+  //   }
+  // };
 
   const interval = async () => {
     try {
@@ -278,7 +325,8 @@ const Navbar: React.FC = () => {
       {/* Header del Navbar */}
       {!isOpen && (
         <View
-          style={tw`flex-row items-center justify-between h-16 p-4 bg-blue-sysintel-900 `}>
+          style={tw`flex-row items-center justify-between h-16 p-4 bg-blue-sysintel-900 `}
+        >
           <TouchableOpacity onPress={toggleNavbar}>
             <Svg
               style={tw`text-white h-7 w-7 `}
@@ -287,7 +335,8 @@ const Navbar: React.FC = () => {
               stroke="currentColor"
               strokeWidth="2"
               strokeLinecap="round"
-              strokeLinejoin="round">
+              strokeLinejoin="round"
+            >
               <Line x1="3" y1="12" x2="21" y2="12" />
               <Line x1="3" y1="6" x2="21" y2="6" />
               <Line x1="3" y1="18" x2="21" y2="18" />
@@ -298,12 +347,14 @@ const Navbar: React.FC = () => {
             <View style={tw`flex-row items-center justify-center gap-4`}>
               <View style={[tw`flex-col items-start justify-center gap-1`]}>
                 <Text
-                  style={tw`text-xs font-semibold capitalize text-blue-sysintel-900 `}>
+                  style={tw`text-xs font-semibold capitalize text-blue-sysintel-900 `}
+                >
                   {userRedux?.firstName} {userRedux?.lastName}{' '}
                 </Text>
                 <TouchableOpacity onPress={() => setZoneModalVisible(true)}>
                   <Text
-                    style={tw`text-xs font-semibold capitalize text-blue-sysintel-900`}>
+                    style={tw`text-xs font-semibold capitalize text-blue-sysintel-900`}
+                  >
                     Zona:{' '}
                     {selectedZoneRedux?.sectorGroup ||
                       selectedZone?.sectorGroup ||
@@ -321,7 +372,7 @@ const Navbar: React.FC = () => {
               <View style={tw`w-12 h-12 overflow-hidden rounded-full `}>
                 <Image
                   source={{
-                    uri: `${process.env.API_URL}users/getImage/${userRedux?.avatar}`,
+                    uri: `${API_URL}users/getImage/${userRedux?.avatar}`,
                   }}
                   style={tw`w-full h-full`}
                   resizeMode="cover"
@@ -336,11 +387,14 @@ const Navbar: React.FC = () => {
         visible={isZoneModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setZoneModalVisible(false)}>
+        onRequestClose={() => setZoneModalVisible(false)}
+      >
         <View
-          style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}>
+          style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}
+        >
           <View
-            style={tw`bg-blue-sysintel-100 w-4/5 rounded-lg p-4 max-h-[70%]`}>
+            style={tw`bg-blue-sysintel-100 w-4/5 rounded-lg p-4 max-h-[70%]`}
+          >
             <Text style={tw`mb-4 text-lg font-bold`}>Selecione a zona</Text>
             <ScrollView>
               {zones.map(zone => (
@@ -350,7 +404,8 @@ const Navbar: React.FC = () => {
                   onPress={() => {
                     handleZoneChange(zone);
                     setZoneModalVisible(false);
-                  }}>
+                  }}
+                >
                   <Text style={tw`text-base text-blue-sysintel-700`}>
                     {zone.sectorGroup} - {zone.groupName}
                   </Text>
@@ -359,47 +414,80 @@ const Navbar: React.FC = () => {
             </ScrollView>
             <TouchableOpacity
               onPress={() => setZoneModalVisible(false)}
-              style={tw`self-end mt-4`}>
+              style={tw`self-end mt-4`}
+            >
               <Text style={tw`text-blue-sysintel-500`}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-      <Modal visible={showGpsModal} transparent animationType="slide">
+
+      {/* <Modal visible={showGpsModal} transparent animationType="slide">
         <View
-          style={tw`items-center justify-center flex-1 bg-black bg-opacity-60`}>
+          style={tw`items-center justify-center flex-1 bg-black bg-opacity-60`}
+        >
           <View style={tw`w-4/5 p-6 rounded-lg bg-blue-sysintel-100`}>
             <Text
-              style={tw`mb-4 text-lg font-bold text-center text-blue-sysintel-900`}>
+              style={tw`mb-4 text-lg font-bold text-center text-blue-sysintel-900`}
+            >
               GPS desativado
             </Text>
             <Text style={tw`mb-6 text-base text-center text-blue-sysintel-700`}>
               Este aplicativo requer que o GPS esteja ativado para funcionar.
               Ative-o para continuar.
             </Text>
-            {/* <TouchableOpacity
-              onPress={openLocationSettings}
-              style={tw`px-4 py-2 mb-4 bg-blue-500 rounded`}>
-              <Text style={tw`font-semibold text-center text-white`}>
-                Ir para Configuração
-              </Text>
-            </TouchableOpacity> */}
+        
 
             <TouchableOpacity
               onPress={recheckGps}
               disabled={loddingGPS}
-              style={tw`px-4 py-2 border rounded border-blue-sysintel-500`}>
+              style={tw`px-4 py-2 border rounded border-blue-sysintel-500`}
+            >
               {loddingGPS ? (
                 <Text
-                  style={tw`font-semibold text-center text-blue-sysintel-200 `}>
+                  style={tw`font-semibold text-center text-blue-sysintel-200 `}
+                >
                   Verificando GPS...
                 </Text>
               ) : (
                 <Text
-                  style={tw`font-semibold text-center text-blue-sysintel-500`}>
+                  style={tw`font-semibold text-center text-blue-sysintel-500`}
+                >
                   GPS já ativado
                 </Text>
               )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal> */}
+
+      <Modal visible={showGpsModal} transparent animationType="fade">
+        <View style={tw`items-center justify-center flex-1 bg-black/60`}>
+          <View style={tw`bg-white w-4/5 p-6 rounded-xl`}>
+            <Text style={tw`text-lg font-bold text-center`}>
+              Permiso de ubicación desactivado
+            </Text>
+
+            <Text style={tw`mt-3 text-center`}>
+              Debes habilitar el permiso de ubicación para continuar.
+            </Text>
+
+            <TouchableOpacity
+              style={tw`mt-6 bg-blue-500 p-3 rounded`}
+              onPress={openAppSettings}
+            >
+              <Text style={tw`text-center text-white font-semibold`}>
+                Abrir configuración
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={tw`mt-3 border border-blue-500 p-3 rounded`}
+              onPress={recheckGps}
+            >
+              <Text style={tw`text-center text-blue-600 font-semibold`}>
+                Ya di el permiso
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -413,17 +501,20 @@ const Navbar: React.FC = () => {
             {
               width: width * 0.8,
               height: height, // Asegurarse de que el navbar tenga la altura completa de la pantalla
-              transform: [{translateX: slideAnim}],
+              transform: [{ translateX: slideAnim }],
             },
-          ]}>
+          ]}
+        >
           <Pressable
             style={tw`absolute items-center justify-center w-20 h-20 rounded-full top-10 -right-7 bg-blue-sysintel-900 `}
-            onPress={toggleNavbar}>
+            onPress={toggleNavbar}
+          >
             <Svg
               style={tw`text-blue-sysintel-100 h-7 w-7 `}
               fill="none"
               viewBox="0 0 24 24"
-              stroke="currentColor">
+              stroke="currentColor"
+            >
               <Path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -436,7 +527,8 @@ const Navbar: React.FC = () => {
             <View style={tw`w-full`}>
               <View style={tw`flex-row items-center justify-start`}>
                 <View
-                  style={tw`flex-col items-start justify-center gap-2 ml-5`}>
+                  style={tw`flex-col items-start justify-center gap-2 ml-5`}
+                >
                   <Text style={tw`text-lg text-blue-sysintel-100`}>
                     {userRedux?.firstName}
                     {userRedux?.lastName}
@@ -457,7 +549,8 @@ const Navbar: React.FC = () => {
                       stroke="currentColor"
                       fill="none"
                       stroke-linecap="round"
-                      stroke-linejoin="round">
+                      stroke-linejoin="round"
+                    >
                       <Path stroke="none" d="M0 0h24v24H0z" />
                       <Path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                       <Circle cx="12" cy="12" r="3" />
@@ -471,9 +564,11 @@ const Navbar: React.FC = () => {
                 {showOptions && (
                   <View style={tw`ml-7`}>
                     <TouchableOpacity
-                      onPress={() => navigation.navigate('EditarPerfil')}>
+                      onPress={() => navigation.navigate('EditarPerfil')}
+                    >
                       <View
-                        style={tw`flex-row items-center justify-start gap-2 `}>
+                        style={tw`flex-row items-center justify-start gap-2 `}
+                      >
                         <Svg
                           style={tw`w-6 h-6 text-blue-sysintel-100`}
                           viewBox="0 0 24 24"
@@ -481,7 +576,8 @@ const Navbar: React.FC = () => {
                           stroke="currentColor"
                           fill="none"
                           stroke-linecap="round"
-                          stroke-linejoin="round">
+                          stroke-linejoin="round"
+                        >
                           <Path stroke="none" d="M0 0h24v24H0z" />
                           <Circle cx="12" cy="12" r="9" />
                         </Svg>
@@ -492,9 +588,11 @@ const Navbar: React.FC = () => {
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => navigation.navigate('CambiarPassword')}
-                      style={tw`mt-2`}>
+                      style={tw`mt-2`}
+                    >
                       <View
-                        style={tw`flex-row items-center justify-start gap-2 mt-4 `}>
+                        style={tw`flex-row items-center justify-start gap-2 mt-4 `}
+                      >
                         <Svg
                           style={tw`w-6 h-6 text-blue-sysintel-100`}
                           viewBox="0 0 24 24"
@@ -502,7 +600,8 @@ const Navbar: React.FC = () => {
                           stroke="currentColor"
                           fill="none"
                           stroke-linecap="round"
-                          stroke-linejoin="round">
+                          stroke-linejoin="round"
+                        >
                           <Path stroke="none" d="M0 0h24v24H0z" />
                           <Circle cx="12" cy="12" r="9" />
                         </Svg>
@@ -521,9 +620,11 @@ const Navbar: React.FC = () => {
                   <View key={menu.id}>
                     <TouchableOpacity
                       onPress={() => handleNavigate(menu.url)}
-                      style={tw`flex-row items-center justify-start gap-2 mt-4 `}>
+                      style={tw`flex-row items-center justify-start gap-2 mt-4 `}
+                    >
                       <View
-                        style={tw`flex-row items-center justify-start gap-2 mt-4 `}>
+                        style={tw`flex-row items-center justify-start gap-2 mt-4 `}
+                      >
                         {menu.icon}
                         <Text style={tw`text-base text-blue-sysintel-100`}>
                           {menu.title}
@@ -542,12 +643,14 @@ const Navbar: React.FC = () => {
               <View style={tw`bg-white h-0.3 mt-4 w-full`} />
               <TouchableOpacity
                 onPress={logout}
-                style={tw`flex-row items-center justify-start gap-2 mt-4`}>
+                style={tw`flex-row items-center justify-start gap-2 mt-4`}
+              >
                 <Svg
                   style={tw`text-white h-7 w-7`}
                   fill="none"
                   viewBox="0 0 24 24"
-                  stroke="currentColor">
+                  stroke="currentColor"
+                >
                   <Path
                     strokeLinecap="round"
                     strokeLinejoin="round"

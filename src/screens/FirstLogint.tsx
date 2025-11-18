@@ -1,4 +1,5 @@
-import React, {useState} from 'react';
+import { API_URL } from '@env';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -13,15 +14,15 @@ import {
   AlertNotificationRoot,
   Toast,
 } from 'react-native-alert-notification';
-import {useDispatch, useSelector} from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import tw from '../../tailwind';
-import {RootState} from '../redux/store';
-import Svg, {Circle, Path} from 'react-native-svg';
+import { RootState } from '../redux/store';
+import Svg, { Circle, Path } from 'react-native-svg';
 import axios from 'axios';
-import {useNavigation} from '@react-navigation/native';
-import {NavigationProp} from '../helpers/types/navigationProp';
+import { useNavigation } from '@react-navigation/native';
+import { NavigationProp } from '../helpers/types/navigationProp';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {clearToken, setUser} from '../redux/authSlice';
+import { clearToken, setUser } from '../redux/authSlice';
 
 const FirstLogint = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -41,7 +42,7 @@ const FirstLogint = () => {
   const toggleRepitPasswordVisibility = () => {
     setShowRepitPassword(!showRepitPassword);
   };
-
+  console.log('API_URL', API_URL);
   const handleNewPassword = async () => {
     setLoading(true);
     if (!nuevoPassword) {
@@ -75,7 +76,7 @@ const FirstLogint = () => {
     }
 
     const response = await axios.post(
-      `${process.env.API_URL}users/updatePasswordByResetCode/${userRedux?.id}`,
+      `${API_URL}users/updatePasswordByResetCode/${userRedux?.id}`,
       {
         newPassword: nuevoPassword,
       },
@@ -138,7 +139,8 @@ const FirstLogint = () => {
           </View>
 
           <View
-            style={tw`flex-col items-start justify-center w-5/6 gap-1 p-5 px-5 mx-auto rounded-md `}>
+            style={tw`flex-col items-start justify-center w-5/6 gap-1 p-5 px-5 mx-auto rounded-md `}
+          >
             <View style={tw`flex-row items-start justify-center `}>
               <Text style={tw`text-[#17375e]  `}>Nova senha : </Text>
             </View>
@@ -151,7 +153,8 @@ const FirstLogint = () => {
               />
               <TouchableOpacity
                 onPress={togglePasswordVisibility}
-                style={tw`absolute right-2 -top-3`}>
+                style={tw`absolute right-2 -top-3`}
+              >
                 {showPassword ? (
                   <Svg
                     style={tw`h-7 w-7 text-[#17375e]`}
@@ -160,7 +163,8 @@ const FirstLogint = () => {
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round">
+                    strokeLinejoin="round"
+                  >
                     <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <Circle cx="12" cy="12" r="3" />
                   </Svg>
@@ -169,7 +173,8 @@ const FirstLogint = () => {
                     style={tw`h-7 w-7 text-[#17375e]`}
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke="currentColor">
+                    stroke="currentColor"
+                  >
                     <Path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -183,7 +188,8 @@ const FirstLogint = () => {
           </View>
 
           <View
-            style={tw`flex-col items-start justify-center w-5/6 gap-1 p-5 px-5 mx-auto rounded-md `}>
+            style={tw`flex-col items-start justify-center w-5/6 gap-1 p-5 px-5 mx-auto rounded-md `}
+          >
             <View style={tw`flex-row items-start justify-center `}>
               <Text style={tw`text-[#17375e]  `}>Repetir Nova senha : </Text>
             </View>
@@ -197,7 +203,8 @@ const FirstLogint = () => {
 
               <TouchableOpacity
                 onPress={toggleRepitPasswordVisibility}
-                style={tw`absolute right-2 -top-3`}>
+                style={tw`absolute right-2 -top-3`}
+              >
                 {showRepitPassword ? (
                   <Svg
                     style={tw`h-7 w-7 text-[#17375e]`}
@@ -206,7 +213,8 @@ const FirstLogint = () => {
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round">
+                    strokeLinejoin="round"
+                  >
                     <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <Circle cx="12" cy="12" r="3" />
                   </Svg>
@@ -215,7 +223,8 @@ const FirstLogint = () => {
                     style={tw`h-7 w-7 text-[#17375e]`}
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke="currentColor">
+                    stroke="currentColor"
+                  >
                     <Path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -231,7 +240,8 @@ const FirstLogint = () => {
           <TouchableOpacity
             disabled={loading}
             style={tw`mt-10 w-5/6 bg-[#17375e] rounded-md p-2 mx-auto mb-10`}
-            onPress={handleNewPassword}>
+            onPress={handleNewPassword}
+          >
             {loading ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
@@ -243,7 +253,8 @@ const FirstLogint = () => {
 
           <TouchableOpacity onPress={() => handleLogin()}>
             <Text
-              style={tw`mt-10 text-base text-center text-blue-500 underline `}>
+              style={tw`mt-10 text-base text-center text-blue-500 underline `}
+            >
               Voltar ao login
             </Text>
           </TouchableOpacity>

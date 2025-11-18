@@ -1,5 +1,5 @@
-import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
-import React, {useState} from 'react';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -20,11 +20,12 @@ import {
   NavigationProp,
   RootStackParamList,
 } from '../../helpers/types/navigationProp';
-import Svg, {Circle, Path} from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import axios from 'axios';
-import {setToken, setUser} from '../../redux/authSlice';
+import { setToken, setUser } from '../../redux/authSlice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useDispatch} from 'react-redux';
+import { useDispatch } from 'react-redux';
+import { API_URL } from '@env';
 
 type RecoverPasswordCodeRouteProp = RouteProp<
   RootStackParamList,
@@ -34,7 +35,7 @@ type RecoverPasswordCodeRouteProp = RouteProp<
 const RecoverPasswordNew = () => {
   const route = useRoute<RecoverPasswordCodeRouteProp>();
   const navigation = useNavigation<NavigationProp>();
-  const {user} = route.params;
+  const { user } = route.params;
   const dispatch = useDispatch();
   const [nuevoPassword, setNuevoPassword] = useState('');
   const [repitPassword, setRepitPassword] = useState('');
@@ -83,7 +84,7 @@ const RecoverPasswordNew = () => {
     }
 
     const response = await axios.post(
-      `${process.env.API_URL}users/updatePasswordByResetCode/${user.id}`,
+      `${API_URL}users/updatePasswordByResetCode/${user.id}`,
       {
         newPassword: nuevoPassword,
       },
@@ -92,13 +93,10 @@ const RecoverPasswordNew = () => {
     const data = response.data;
 
     if (data.message === 'Ok') {
-      const response_login = await axios.post(
-        `${process.env.API_URL}users/login`,
-        {
-          email: user.email,
-          password: nuevoPassword,
-        },
-      );
+      const response_login = await axios.post(`${API_URL}users/login`, {
+        email: user.email,
+        password: nuevoPassword,
+      });
       // Aquí puedes manejar la respuesta de la API
 
       const data_login = response_login.data;
@@ -150,7 +148,8 @@ const RecoverPasswordNew = () => {
         <AlertNotificationRoot>
           <View style={tw`mt-16`}>
             <Text
-              style={tw`text-3xl font-bold mb-4 text-center text-blue-sysintel-700`}>
+              style={tw`text-3xl font-bold mb-4 text-center text-blue-sysintel-700`}
+            >
               Recuperar senha
             </Text>
             <Text style={tw` text-base text-blue-sysintel-600 text-center `}>
@@ -159,7 +158,8 @@ const RecoverPasswordNew = () => {
           </View>
 
           <View
-            style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}>
+            style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}
+          >
             <View style={tw`flex-row justify-center items-start `}>
               <Text style={tw`text-blue-sysintel-600  `}>Nova senha : </Text>
             </View>
@@ -172,7 +172,8 @@ const RecoverPasswordNew = () => {
               />
               <TouchableOpacity
                 onPress={togglePasswordVisibility}
-                style={tw`absolute right-2 top-1`}>
+                style={tw`absolute right-2 top-1`}
+              >
                 {showPassword ? (
                   <Svg
                     style={tw`h-7 w-7 text-blue-sysintel-600`}
@@ -181,7 +182,8 @@ const RecoverPasswordNew = () => {
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round">
+                    strokeLinejoin="round"
+                  >
                     <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <Circle cx="12" cy="12" r="3" />
                   </Svg>
@@ -190,7 +192,8 @@ const RecoverPasswordNew = () => {
                     style={tw`h-7 w-7 text-blue-sysintel-600`}
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke="currentColor">
+                    stroke="currentColor"
+                  >
                     <Path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -204,7 +207,8 @@ const RecoverPasswordNew = () => {
           </View>
 
           <View
-            style={tw`flex-col justify-center items-start w-5/6 mx-auto gap-1 px-5 rounded-md  p-5 `}>
+            style={tw`flex-col justify-center items-start w-5/6 mx-auto gap-1 px-5 rounded-md  p-5 `}
+          >
             <View style={tw`flex-row justify-center items-start `}>
               <Text style={tw`text-blue-sysintel-600  `}>
                 Repetir Nova senha :{' '}
@@ -220,7 +224,8 @@ const RecoverPasswordNew = () => {
 
               <TouchableOpacity
                 onPress={toggleRepitPasswordVisibility}
-                style={tw`absolute right-2  top-1`}>
+                style={tw`absolute right-2  top-1`}
+              >
                 {showRepitPassword ? (
                   <Svg
                     style={tw`h-7 w-7 text-blue-sysintel-600`}
@@ -229,7 +234,8 @@ const RecoverPasswordNew = () => {
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round">
+                    strokeLinejoin="round"
+                  >
                     <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <Circle cx="12" cy="12" r="3" />
                   </Svg>
@@ -238,7 +244,8 @@ const RecoverPasswordNew = () => {
                     style={tw`h-7 w-7 text-blue-sysintel-600`}
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke="currentColor">
+                    stroke="currentColor"
+                  >
                     <Path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -254,7 +261,8 @@ const RecoverPasswordNew = () => {
           <TouchableOpacity
             disabled={loading}
             style={tw`mt-5 w-5/6 bg-blue-sysintel-700 rounded-md p-2 mx-auto mb-10`}
-            onPress={handleNewPassword}>
+            onPress={handleNewPassword}
+          >
             {loading ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (

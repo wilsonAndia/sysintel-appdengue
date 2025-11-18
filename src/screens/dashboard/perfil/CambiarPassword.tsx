@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -16,13 +16,14 @@ import {
   Dialog,
 } from 'react-native-alert-notification';
 import axios from 'axios';
-import {Circle, Path, Svg} from 'react-native-svg';
+import { Circle, Path, Svg } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useNavigation} from '@react-navigation/native';
-import {useDispatch, useSelector} from 'react-redux';
-import {NavigationProp} from '../../../helpers/types/navigationProp';
-import {clearToken} from '../../../redux/authSlice';
-import {RootState} from '../../../redux/store';
+import { useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import { NavigationProp } from '../../../helpers/types/navigationProp';
+import { clearToken } from '../../../redux/authSlice';
+import { RootState } from '../../../redux/store';
+import { API_URL } from '@env';
 
 interface familiar {
   id: string;
@@ -82,7 +83,7 @@ const CambiarPassword = () => {
 
     try {
       const response = await axios.put(
-        `${process.env.API_URL}users/updatePassword/${userRedux?.id}`,
+        `${API_URL}users/updatePassword/${userRedux?.id}`,
         {
           currentPassword: currentUser.password_actual,
           newPassword: currentUser.password_nueva,
@@ -146,13 +147,15 @@ const CambiarPassword = () => {
       <ScrollView contentContainerStyle={tw``}>
         <View style={tw`flex mt-24`}>
           <Text
-            style={tw`text-xl font-bold text-center text-blue-sysintel-900`}>
+            style={tw`text-xl font-bold text-center text-blue-sysintel-900`}
+          >
             Alterar senha
           </Text>
 
           <View style={tw`flex-col justify-center items-center mt-1`}>
             <View
-              style={tw`flex-col justify-center items-start w-5/6 mx-auto gap-1 px-5 rounded-md  p-5 `}>
+              style={tw`flex-col justify-center items-start w-5/6 mx-auto gap-1 px-5 rounded-md  p-5 `}
+            >
               <View style={tw`flex-row justify-center items-start `}>
                 <Text style={tw`text-blue-sysintel-800 font-semibold  `}>
                   Digite a senha atual :{' '}
@@ -172,7 +175,8 @@ const CambiarPassword = () => {
           </View>
 
           <View
-            style={tw`flex-col justify-center items-start w-5/6 mx-auto gap-1 px-5 rounded-md  p-5 `}>
+            style={tw`flex-col justify-center items-start w-5/6 mx-auto gap-1 px-5 rounded-md  p-5 `}
+          >
             <View style={tw`flex-row justify-center items-start `}>
               <Text style={tw`text-blue-sysintel-800 font-semibold  `}>
                 Nova senha :{' '}
@@ -187,7 +191,8 @@ const CambiarPassword = () => {
               />
               <TouchableOpacity
                 onPress={togglePasswordVisibility}
-                style={tw`absolute right-2 top-1`}>
+                style={tw`absolute right-2 top-1`}
+              >
                 {showPassword ? (
                   <Svg
                     style={tw`h-7 w-7 text-blue-sysintel-600`}
@@ -196,7 +201,8 @@ const CambiarPassword = () => {
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round">
+                    strokeLinejoin="round"
+                  >
                     <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <Circle cx="12" cy="12" r="3" />
                   </Svg>
@@ -205,7 +211,8 @@ const CambiarPassword = () => {
                     style={tw`h-7 w-7 text-blue-sysintel-600`}
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke="currentColor">
+                    stroke="currentColor"
+                  >
                     <Path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -219,7 +226,8 @@ const CambiarPassword = () => {
           </View>
 
           <View
-            style={tw`flex-col justify-center items-start w-5/6 mx-auto gap-1 px-5 rounded-md  p-5 `}>
+            style={tw`flex-col justify-center items-start w-5/6 mx-auto gap-1 px-5 rounded-md  p-5 `}
+          >
             <View style={tw`flex-row justify-center items-start `}>
               <Text style={tw`text-blue-sysintel-800  font-semibold  `}>
                 Repetir Nova senha :{' '}
@@ -235,7 +243,8 @@ const CambiarPassword = () => {
 
               <TouchableOpacity
                 onPress={toggleRepitPasswordVisibility}
-                style={tw`absolute right-2  top-1`}>
+                style={tw`absolute right-2  top-1`}
+              >
                 {showRepitPassword ? (
                   <Svg
                     style={tw`h-7 w-7 text-blue-sysintel-600`}
@@ -244,7 +253,8 @@ const CambiarPassword = () => {
                     stroke="currentColor"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round">
+                    strokeLinejoin="round"
+                  >
                     <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                     <Circle cx="12" cy="12" r="3" />
                   </Svg>
@@ -253,7 +263,8 @@ const CambiarPassword = () => {
                     style={tw`h-7 w-7 text-blue-sysintel-600`}
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke="currentColor">
+                    stroke="currentColor"
+                  >
                     <Path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -269,7 +280,8 @@ const CambiarPassword = () => {
           <AlertNotificationRoot>
             <TouchableOpacity
               style={tw`mt-10 w-5/6 bg-blue-sysintel-800 rounded-md p-2 mx-auto mb-10`}
-              onPress={handleRegister}>
+              onPress={handleRegister}
+            >
               <Text style={tw`text-white text-lg text-center`}>
                 Atualizar senha
               </Text>

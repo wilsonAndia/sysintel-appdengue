@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -14,11 +14,12 @@ import {
   Dialog,
   Toast,
 } from 'react-native-alert-notification';
+import { API_URL } from '@env';
 
-import Svg, {Path, Polyline} from 'react-native-svg';
+import Svg, { Path, Polyline } from 'react-native-svg';
 import tw from '../../../tailwind';
-import {useNavigation} from '@react-navigation/native';
-import {NavigationProp} from '../../helpers/types/navigationProp';
+import { useNavigation } from '@react-navigation/native';
+import { NavigationProp } from '../../helpers/types/navigationProp';
 import axios from 'axios';
 
 interface User {
@@ -60,7 +61,7 @@ const RecoverPasswordEmail = () => {
 
     try {
       const response = await axios.post(
-        `${process.env.API_URL}users/setCodeResetPassword`,
+        `${API_URL}users/setCodeResetPassword`,
         {
           email: correo.trim().toLowerCase(),
         },
@@ -77,7 +78,7 @@ const RecoverPasswordEmail = () => {
           email: data.payload.email,
         };
         setLoading(false);
-        navigation.navigate('RecoverPasswordCode', {user});
+        navigation.navigate('RecoverPasswordCode', { user });
       } else {
         console.log('erroe');
         Toast.show({
@@ -105,14 +106,16 @@ const RecoverPasswordEmail = () => {
         <AlertNotificationRoot>
           <View style={tw`mt-16`}>
             <Text
-              style={tw`mb-4 text-3xl font-bold text-center text-blue-sysintel-700`}>
+              style={tw`mb-4 text-3xl font-bold text-center text-blue-sysintel-700`}
+            >
               Recuperar senha
             </Text>
             <Text style={tw`text-base text-center  text-blue-sysintel-600`}>
               Por favor insira seu e-mail
             </Text>
             <View
-              style={tw`flex-row items-center justify-start w-full gap-4 px-5 mt-5`}>
+              style={tw`flex-row items-center justify-start w-full gap-4 px-5 mt-5`}
+            >
               <Svg
                 style={tw`h-7 w-7 text-blue-sysintel-600`}
                 viewBox="0 0 24 24"
@@ -120,7 +123,8 @@ const RecoverPasswordEmail = () => {
                 stroke="currentColor"
                 strokeWidth="2"
                 strokeLinecap="round"
-                strokeLinejoin="round">
+                strokeLinejoin="round"
+              >
                 <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
                 <Polyline points="22,6 12,13 2,6" />
               </Svg>
@@ -137,13 +141,15 @@ const RecoverPasswordEmail = () => {
             <TouchableOpacity
               style={tw`px-5 mt-3 `}
               onPress={handleSendCodeResetPassword}
-              disabled={loading}>
+              disabled={loading}
+            >
               <View style={tw`px-5 py-2 mt-3  rounded-xl bg-blue-sysintel-800`}>
                 {loading ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <Text
-                    style={tw`text-base text-center  text-blue-sysintel-100`}>
+                    style={tw`text-base text-center  text-blue-sysintel-100`}
+                  >
                     Seguindo
                   </Text>
                 )}
@@ -152,7 +158,8 @@ const RecoverPasswordEmail = () => {
 
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
               <Text
-                style={tw`mt-5 text-base text-center underline  text-blue-sysintel-500`}>
+                style={tw`mt-5 text-base text-center underline  text-blue-sysintel-500`}
+              >
                 Voltar ao login
               </Text>
             </TouchableOpacity>

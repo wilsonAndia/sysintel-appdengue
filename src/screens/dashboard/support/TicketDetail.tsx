@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef} from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,24 +15,30 @@ import {
   Modal,
 } from 'react-native';
 import tw from '../../../../tailwind';
-import {useRoute, useNavigation} from '@react-navigation/native';
-import {RouteProp} from '@react-navigation/core';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import { RouteProp } from '@react-navigation/core';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {launchImageLibrary} from 'react-native-image-picker';
-import {useSelector} from 'react-redux';
-import {RootState} from '../../../redux/store';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../redux/store';
 import Navbar from '../../../components/NavBar';
-import {ButtonRegresar} from '../../../helpers/ButtonRegresar';
+import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
 import axios from 'axios';
+import { API_URL } from '@env';
 
-type TicketRouteProp = RouteProp<{params: {ticketId: string}}, 'params'>;
+type TicketRouteProp = RouteProp<{ params: { ticketId: string } }, 'params'>;
 interface Message {
   id: string;
   message: string;
   createdAt: string;
-  sender: {id: string; firstName: string; lastName: string};
-  attachments: {id: string; fileName: string; fileUrl: string; type: string}[];
+  sender: { id: string; firstName: string; lastName: string };
+  attachments: {
+    id: string;
+    fileName: string;
+    fileUrl: string;
+    type: string;
+  }[];
 }
 
 type PendingAttachment = {
@@ -45,7 +51,7 @@ type PendingAttachment = {
 export default function TicketDetail() {
   const route = useRoute<TicketRouteProp>();
   const navigation = useNavigation();
-  const {ticketId} = route.params;
+  const { ticketId } = route.params;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +69,7 @@ export default function TicketDetail() {
   }, []);
 
   const openImage = (fileUrl: string) => {
-    const fullUrl = `${process.env.API_URL}support/getImage/${fileUrl}`;
+    const fullUrl = `${API_URL}support/getImage/${fileUrl}`;
     setSelectedImageUrl(fullUrl);
     setImageModalVisible(true);
   };
@@ -77,7 +83,7 @@ export default function TicketDetail() {
       setMessages(res.messages || []);
       // Scroll al final
       setTimeout(
-        () => flatListRef.current?.scrollToEnd({animated: false}),
+        () => flatListRef.current?.scrollToEnd({ animated: false }),
         200,
       );
     } catch (err) {
@@ -89,14 +95,11 @@ export default function TicketDetail() {
 
   const getPresignedUrl = async (fileName: string, mimeType: string) => {
     const token = await AsyncStorage.getItem('token');
-    const res = await axios.get(
-      `${process.env.API_URL}support/media/upload-url`,
-      {
-        params: {fileName, contentType: mimeType},
-        headers: {Authorization: `Bearer ${token}`},
-      },
-    );
-    return res.data as {url: string; key: string};
+    const res = await axios.get(`${API_URL}support/media/upload-url`, {
+      params: { fileName, contentType: mimeType },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.data as { url: string; key: string };
   };
 
   const uploadToS3 = async (
@@ -110,7 +113,7 @@ export default function TicketDetail() {
     try {
       const result = await fetch(signedUrl, {
         method: 'PUT',
-        headers: {'Content-Type': mimeType},
+        headers: { 'Content-Type': mimeType },
         body: blob,
       });
 
@@ -127,14 +130,14 @@ export default function TicketDetail() {
   const pickImage = async () => {
     try {
       setSending(true);
-      const {assets} = await launchImageLibrary({mediaType: 'photo'});
+      const { assets } = await launchImageLibrary({ mediaType: 'photo' });
       if (!assets || !assets.length) {
         setSending(false);
         return;
       }
 
       const file = assets[0];
-      const {url: signedUrl, key} = await getPresignedUrl(
+      const { url: signedUrl, key } = await getPresignedUrl(
         file.fileName!,
         file.type!,
       );
@@ -200,19 +203,20 @@ export default function TicketDetail() {
     }
   };
 
-  const renderItem = ({item}: {item: Message}) => {
+  const renderItem = ({ item }: { item: Message }) => {
     const isMe = item.sender.id === currentUserId;
     return (
       <View
         style={[
           tw`my-2 p-3 rounded-xl max-w-3/4`,
           isMe ? tw`self-end bg-blue-sysintel-800` : tw`self-start bg-gray-200`,
-        ]}>
+        ]}
+      >
         {item.attachments.map(att => (
           <TouchableOpacity key={att.id} onPress={() => openImage(att.fileUrl)}>
             <Image
               source={{
-                uri: `${process.env.API_URL}support/getImage/${att.fileUrl}`,
+                uri: `${API_URL}support/getImage/${att.fileUrl}`,
               }}
               style={styles.image}
             />
@@ -227,7 +231,8 @@ export default function TicketDetail() {
           style={[
             tw`text-xs mt-1`,
             isMe ? tw`text-blue-sysintel-100` : tw`text-gray-500`,
-          ]}>
+          ]}
+        >
           {new Date(item.createdAt).toLocaleTimeString('pt-BR', {
             hour: '2-digit',
             minute: '2-digit',
@@ -253,7 +258,8 @@ export default function TicketDetail() {
       </View>
       <KeyboardAvoidingView
         style={tw`flex-1 border-t border-gray-300`}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -273,15 +279,16 @@ export default function TicketDetail() {
             contentContainerStyle={tw`items-center`}
             data={attachments}
             keyExtractor={(_, i) => String(i)}
-            renderItem={({item, index}) => (
+            renderItem={({ item, index }) => (
               <View style={tw`mr-3 relative`}>
                 <Image
-                  source={{uri: item.previewUri}}
+                  source={{ uri: item.previewUri }}
                   style={tw`w-16 h-16 rounded-lg`}
                 />
                 <TouchableOpacity
                   onPress={() => removeAttachment(index)}
-                  style={tw`absolute -top-1 -right-2 bg-red-500 rounded-full px-2 py-1`}>
+                  style={tw`absolute -top-1 -right-2 bg-red-500 rounded-full px-2 py-1`}
+                >
                   <Text style={tw`text-white text-xs`}>X</Text>
                 </TouchableOpacity>
               </View>
@@ -303,16 +310,16 @@ export default function TicketDetail() {
               <TouchableOpacity
                 style={tw`ml-2 p-2`}
                 onPress={pickImage}
-                disabled={sending}>
+                disabled={sending}
+              >
                 <Text>📷</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={tw`ml-2 p-2`}
                 onPress={sendMessage}
-                disabled={
-                  sending || (!text.trim() && attachments.length === 0)
-                }>
+                disabled={sending || (!text.trim() && attachments.length === 0)}
+              >
                 <Text>➤</Text>
               </TouchableOpacity>
             </>
@@ -322,7 +329,7 @@ export default function TicketDetail() {
           <View style={tw`flex-1 bg-black items-center justify-center`}>
             {selectedImageUrl ? (
               <Image
-                source={{uri: selectedImageUrl}}
+                source={{ uri: selectedImageUrl }}
                 style={tw`w-full h-full`}
                 resizeMode="contain"
               />
@@ -333,7 +340,8 @@ export default function TicketDetail() {
                 setImageModalVisible(false);
                 setSelectedImageUrl(null);
               }}
-              style={tw`absolute top-10 right-10 bg-red-500 px-3 py-2 rounded-full`}>
+              style={tw`absolute top-10 right-10 bg-red-500 px-3 py-2 rounded-full`}
+            >
               <Text style={tw`text-white`}>Fechar</Text>
             </TouchableOpacity>
           </View>

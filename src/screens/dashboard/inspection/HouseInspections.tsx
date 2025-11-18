@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -13,16 +13,17 @@ import {
 } from 'react-native';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
-import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import {
   NavigationProp,
   RootStackParamList,
 } from '../../../helpers/types/navigationProp';
-import {ButtonRegresar} from '../../../helpers/ButtonRegresar';
+import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
 import Video from 'react-native-video';
-import {useSelector} from 'react-redux';
-import {RootState} from '../../../redux/store';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../redux/store';
+import { API_URL } from '@env';
 
 type InspectionRouteProp = RouteProp<RootStackParamList, 'HouseInspections'>;
 
@@ -57,7 +58,7 @@ interface House {
 const HouseInspections = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<InspectionRouteProp>();
-  const {id} = route.params;
+  const { id } = route.params;
   const zone = useSelector((state: RootState) => state.zones.selectedZone);
   const inTheArea = useSelector(
     (state: RootState) => state.inTheArea.inTheArea,
@@ -124,7 +125,7 @@ const HouseInspections = () => {
         return '';
       }
     } else {
-      return `${process.env.API_URL}inspections/getImage/${media.url}`;
+      return `${API_URL}inspections/getImage/${media.url}`;
     }
   };
 
@@ -160,8 +161,9 @@ const HouseInspections = () => {
               //   );
               //   return;
               // }
-              navigation.navigate('Inspection', {houseId: id});
-            }}>
+              navigation.navigate('Inspection', { houseId: id });
+            }}
+          >
             <Text style={tw`font-bold text-white`}>+ Nova Inspeção</Text>
           </TouchableOpacity>
 
@@ -178,8 +180,9 @@ const HouseInspections = () => {
                 );
                 return;
               }
-              navigation.navigate('Observations', {houseId: id});
-            }}>
+              navigation.navigate('Observations', { houseId: id });
+            }}
+          >
             <Text style={tw`mx-auto font-bold text-white`}>Observações</Text>
           </TouchableOpacity>
         </View>
@@ -202,17 +205,18 @@ const HouseInspections = () => {
           data={house?.inspections}
           keyExtractor={inspection => inspection.id}
           contentContainerStyle={tw`px-4 py-4`}
-          renderItem={({item: inspection}) => (
+          renderItem={({ item: inspection }) => (
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate('InspectionDetail', {id: inspection.id})
+                navigation.navigate('InspectionDetail', { id: inspection.id })
               }
-              style={tw`p-4 mb-4 bg-blue-sysintel-50 rounded-lg shadow-md`}>
+              style={tw`p-4 mb-4 bg-blue-sysintel-50 rounded-lg shadow-md`}
+            >
               <Text style={tw`text-lg font-bold text-blue-sysintel-900`}>
                 Inspeção em{' '}
                 {new Date(inspection.inspectionDate).toLocaleDateString(
                   'es-ES',
-                  {day: '2-digit', month: '2-digit', year: 'numeric'},
+                  { day: '2-digit', month: '2-digit', year: 'numeric' },
                 )}
               </Text>
               <Text style={tw`text-blue-sysintel-800`}>
@@ -237,18 +241,20 @@ const HouseInspections = () => {
                     <View key={media.id} style={tw`flex-row items-center mb-4`}>
                       <TouchableOpacity
                         onPress={() => handleOpenMedia(media)}
-                        style={tw`mr-4`}>
+                        style={tw`mr-4`}
+                      >
                         {media.type === 'image' ? (
                           <Image
                             source={{
-                              uri: `${process.env.API_URL}inspections/getImage/${media.url}`,
+                              uri: `${API_URL}inspections/getImage/${media.url}`,
                             }}
                             style={tw`w-32 h-32 rounded-lg`}
                             resizeMode="cover"
                           />
                         ) : (
                           <View
-                            style={tw`items-center justify-center w-32 h-32 bg-black rounded-lg`}>
+                            style={tw`items-center justify-center w-32 h-32 bg-black rounded-lg`}
+                          >
                             <Text style={tw`text-sm text-white`}>
                               Assista ao vídeo
                             </Text>
@@ -273,13 +279,13 @@ const HouseInspections = () => {
             <ActivityIndicator size="large" color="#fff" />
           ) : selectedMedia?.type === 'image' ? (
             <Image
-              source={{uri: mediaUrl}}
+              source={{ uri: mediaUrl }}
               style={tw`w-full h-full`}
               resizeMode="contain"
             />
           ) : selectedMedia?.type === 'video' ? (
             <Video
-              source={{uri: mediaUrl}}
+              source={{ uri: mediaUrl }}
               style={tw`w-full h-full`}
               resizeMode="contain"
               controls={true}
@@ -291,7 +297,8 @@ const HouseInspections = () => {
               setSelectedMedia(null);
               setMediaUrl('');
             }}
-            style={tw`absolute p-2 bg-red-500 rounded-full top-10 right-10`}>
+            style={tw`absolute p-2 bg-red-500 rounded-full top-10 right-10`}
+          >
             <Text style={tw`text-white`}>Fechar</Text>
           </TouchableOpacity>
         </View>

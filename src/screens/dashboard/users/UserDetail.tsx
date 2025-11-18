@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   SafeAreaView,
   Text,
@@ -10,11 +10,12 @@ import {
   Image,
 } from 'react-native';
 import tw from '../../../../tailwind';
-import {RouteProp, useRoute} from '@react-navigation/native';
-import {RootStackParamList} from '../../../helpers/types/navigationProp';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
+import { RouteProp, useRoute } from '@react-navigation/native';
+import { RootStackParamList } from '../../../helpers/types/navigationProp';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
 import Navbar from '../../../components/NavBar';
-import {ButtonRegresar} from '../../../helpers/ButtonRegresar';
+import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
+import { API_URL } from '@env';
 
 type UserDetailRouteProp = RouteProp<RootStackParamList, 'UserDetail'>;
 
@@ -36,7 +37,7 @@ interface Module {
 
 const UserDetail = () => {
   const route = useRoute<UserDetailRouteProp>();
-  const {id} = route.params;
+  const { id } = route.params;
 
   const [user, setUser] = useState<User | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
@@ -127,7 +128,8 @@ const UserDetail = () => {
   if (loading) {
     return (
       <SafeAreaView
-        style={tw`items-center justify-center w-full h-full bg-white`}>
+        style={tw`items-center justify-center w-full h-full bg-white`}
+      >
         <ActivityIndicator size="large" color="#17375e" />
         <Text style={tw`mt-4 text-lg text-gray-700`}>Carregando ...</Text>
       </SafeAreaView>
@@ -143,7 +145,8 @@ const UserDetail = () => {
             <ButtonRegresar textColor="white" arrowColor="white" />
           </View>
           <View
-            style={tw`items-center justify-center flex-1 h-full text-lg text-gray-700`}>
+            style={tw`items-center justify-center flex-1 h-full text-lg text-gray-700`}
+          >
             <Text style={tw`text-lg text-gray-700`}>
               Nenhum dado de usuário foi encontrado.
             </Text>
@@ -167,7 +170,7 @@ const UserDetail = () => {
           <View style={tw`items-center mb-4`}>
             <Image
               source={{
-                uri: `${process.env.API_URL}users/getImage/${user.avatar}`,
+                uri: `${API_URL}users/getImage/${user.avatar}`,
               }}
               style={tw`w-24 h-24 rounded-full`}
               resizeMode="cover"
@@ -194,7 +197,8 @@ const UserDetail = () => {
           <TouchableOpacity
             key={module.id}
             style={tw`flex-row items-center mb-2`}
-            onPress={() => toggleModuleSelection(module.id)}>
+            onPress={() => toggleModuleSelection(module.id)}
+          >
             <View
               style={tw`w-5 h-5 border ${
                 selectedModules.includes(module.id)
@@ -209,7 +213,8 @@ const UserDetail = () => {
         <TouchableOpacity
           style={tw`p-3 mt-6 bg-[#003366] rounded-lg`}
           onPress={handleUpdateModules}
-          disabled={updating}>
+          disabled={updating}
+        >
           {updating ? (
             <Text style={tw`font-bold text-center text-white`}>
               Atualização...

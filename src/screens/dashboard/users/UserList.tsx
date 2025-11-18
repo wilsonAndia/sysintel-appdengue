@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -13,14 +13,15 @@ import {
 } from 'react-native';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
-import {useSelector} from 'react-redux';
-import {RootState} from '../../../redux/store';
-import {useNavigation} from '@react-navigation/native';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../redux/store';
+import { useNavigation } from '@react-navigation/native';
 import {
   NavigationProp,
   RootStackParamList,
 } from '../../../helpers/types/navigationProp';
+import { API_URL } from '@env';
 
 interface User {
   id: string;
@@ -95,7 +96,7 @@ const UserList = () => {
       const response = await fetchAxiosToken({
         url: `users/delete-user`,
         method: 'post',
-        body: {userDelete: userId},
+        body: { userDelete: userId },
       });
 
       if (response.message === 'Ok') {
@@ -118,8 +119,8 @@ const UserList = () => {
       'Confirmar a exclusão',
       '¿Tem certeza de que deseja excluir esse usuário?',
       [
-        {text: 'Cancelar', style: 'cancel'},
-        {text: 'Excluir', onPress: () => deleteUser(userId)},
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Excluir', onPress: () => deleteUser(userId) },
       ],
     );
   };
@@ -133,15 +134,16 @@ const UserList = () => {
     fetchUsers(1);
   }, []);
 
-  const renderUser = ({item: user}: {item: User}) => {
+  const renderUser = ({ item: user }: { item: User }) => {
     if (user.id !== userRedux?.id) {
       return (
         <View
           key={user.id}
-          style={tw`flex-row p-4 mb-4 bg-gray-100 rounded-lg shadow-md`}>
+          style={tw`flex-row p-4 mb-4 bg-gray-100 rounded-lg shadow-md`}
+        >
           <Image
             source={{
-              uri: `${process.env.API_URL}users/getImage/${user.avatar}`,
+              uri: `${API_URL}users/getImage/${user.avatar}`,
             }}
             style={tw`w-16 h-16 mr-4 rounded-full`}
             resizeMode="cover"
@@ -156,7 +158,8 @@ const UserList = () => {
               <TouchableOpacity
                 style={tw`flex-1 p-2 mr-2 bg-red-500 rounded-lg`}
                 onPress={() => confirmDelete(user.id)}
-                disabled={deleting && deleUser === user.id}>
+                disabled={deleting && deleUser === user.id}
+              >
                 {deleting && deleUser === user.id ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
@@ -168,8 +171,9 @@ const UserList = () => {
               <TouchableOpacity
                 style={tw`flex-1 p-2 bg-[#003366] rounded-lg`}
                 onPress={() =>
-                  navigation.navigate('UserDetail', {id: user.id})
-                }>
+                  navigation.navigate('UserDetail', { id: user.id })
+                }
+              >
                 <Text style={tw`font-bold text-center text-white`}>
                   Ver detalhes
                 </Text>
@@ -186,17 +190,20 @@ const UserList = () => {
     <View style={tw`w-full bg-white`}>
       <Navbar />
       <View
-        style={tw`absolute z-10 flex-row items-center justify-end w-full px-4 py-2 top-16`}>
+        style={tw`absolute z-10 flex-row items-center justify-end w-full px-4 py-2 top-16`}
+      >
         <TouchableOpacity
           onPress={() => navigation.navigate('CreateUser')}
-          style={tw`w-32 px-1 py-2 bg-white border-2 border-blue-500 rounded-lg`}>
+          style={tw`w-32 px-1 py-2 bg-white border-2 border-blue-500 rounded-lg`}
+        >
           <Text style={tw`text-lg font-bold text-center text-blue-500`}>
             + Usuário
           </Text>
         </TouchableOpacity>
       </View>
       <View
-        style={tw`absolute z-10 flex-row items-center justify-between w-full px-4 py-2 top-32`}>
+        style={tw`absolute z-10 flex-row items-center justify-between w-full px-4 py-2 top-32`}
+      >
         <TextInput
           style={tw`flex-1 p-2 border border-gray-300 rounded-lg`}
           placeholder="Buscar por nome"
@@ -206,7 +213,8 @@ const UserList = () => {
         />
         <TouchableOpacity
           onPress={handleSearch}
-          style={tw`ml-2 px-4 py-2 bg-[#003366] rounded-lg`}>
+          style={tw`ml-2 px-4 py-2 bg-[#003366] rounded-lg`}
+        >
           <Text style={tw`font-bold text-white`}>Buscar</Text>
         </TouchableOpacity>
       </View>

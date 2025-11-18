@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { NavigationProp } from '../helpers/types/navigationProp';
 import tw from '../../tailwind';
+import { API_URL } from '@env';
 
 import {
   ALERT_TYPE,
@@ -53,7 +54,7 @@ const Login: React.FC = () => {
       [field]: value, // Actualiza el campo correspondiente
     }));
   };
-
+  console.log('API_URLlllll', API_URL);
   const handleRegister = async () => {
     // Validación simple para campos vacíos
     Keyboard.dismiss();
@@ -81,14 +82,11 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      console.log(`${process.env.API_URL}users/loginApp`);
-      const response = await axios.post(
-        `${process.env.API_URL}users/loginApp`,
-        {
-          email: input.correo.trim().toLowerCase(),
-          password: input.password,
-        },
-      );
+      console.log(`${API_URL}users/loginApp`);
+      const response = await axios.post(`${API_URL}users/loginApp`, {
+        email: input.correo.trim().toLowerCase(),
+        password: input.password,
+      });
 
       const data = response.data;
       console.log(data);

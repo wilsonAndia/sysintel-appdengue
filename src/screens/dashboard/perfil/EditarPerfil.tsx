@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import Navbar from '../../../components/NavBar';
 import tw from '../../../../tailwind';
-import {TextInput} from 'react-native-gesture-handler';
+import { TextInput } from 'react-native-gesture-handler';
 import {
   ALERT_TYPE,
   AlertNotificationRoot,
@@ -17,9 +17,10 @@ import {
   Toast,
 } from 'react-native-alert-notification';
 import axios from 'axios';
-import {useDispatch, useSelector} from 'react-redux';
-import {RootState} from '../../../redux/store';
-import {setUser} from '../../../redux/authSlice';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '../../../redux/store';
+import { setUser } from '../../../redux/authSlice';
+import { API_URL } from '@env';
 
 interface User {
   id: string;
@@ -47,9 +48,7 @@ const EditarPerfil: React.FC = () => {
 
   const getDataFamiliar = async () => {
     /*  console.log(userRedux?.id); */
-    const response = await axios.get(
-      `${process.env.API_URL}users/getOne/${userRedux?.id}`,
-    );
+    const response = await axios.get(`${API_URL}users/getOne/${userRedux?.id}`);
     console.log('perfil', response.data.payload);
     setCurrentUser({
       id: response.data.payload.id,
@@ -103,7 +102,7 @@ const EditarPerfil: React.FC = () => {
       formData.append('email', currentUser.email);
 
       await axios.put(
-        `${process.env.API_URL}users/updateProfile/${currentUser.id}`,
+        `${API_URL}users/updateProfile/${currentUser.id}`,
         formData,
         {
           headers: {
@@ -155,7 +154,8 @@ const EditarPerfil: React.FC = () => {
         <AlertNotificationRoot>
           <View style={tw`flex mt-24`}>
             <Text
-              style={tw`text-xl font-bold text-center text-blue-sysintel-900`}>
+              style={tw`text-xl font-bold text-center text-blue-sysintel-900`}
+            >
               Editar Perfil
             </Text>
             <Text style={tw`mb-4 text-sm text-center text-red-500`}>
@@ -163,7 +163,8 @@ const EditarPerfil: React.FC = () => {
             </Text>
             <View style={tw`flex-col items-center justify-center mt-1`}>
               <View
-                style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}>
+                style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}
+              >
                 <View style={tw`flex-row items-start justify-center `}>
                   <Text style={tw`text-blue-sysintel-800 font-semibold   `}>
                     Nome :{' '}
@@ -182,7 +183,8 @@ const EditarPerfil: React.FC = () => {
             </View>
 
             <View
-              style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}>
+              style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}
+            >
               <View style={tw`flex-row items-start justify-center `}>
                 <Text style={tw`text-blue-sysintel-800 font-semibold  `}>
                   Sobrenome :{' '}
@@ -199,7 +201,8 @@ const EditarPerfil: React.FC = () => {
             </View>
 
             <View
-              style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}>
+              style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}
+            >
               <View style={tw`flex-row items-start justify-center `}>
                 <Text style={tw`text-blue-sysintel-800 font-semibold   `}>
                   Telefone :{' '}
@@ -215,7 +218,8 @@ const EditarPerfil: React.FC = () => {
             </View>
 
             <View
-              style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}>
+              style={tw`flex-col items-start justify-center w-5/6 gap-1 p-2 px-5 mx-auto rounded-md `}
+            >
               <View style={tw`flex-row items-start justify-center `}>
                 <Text style={tw`text-blue-sysintel-800  font-semibold  `}>
                   E-mail :{' '}
@@ -236,7 +240,8 @@ const EditarPerfil: React.FC = () => {
                 loading ? 'py-6' : ''
               } rounded-md p-2 mx-auto mb-10`}
               disabled={loading}
-              onPress={handleRegister}>
+              onPress={handleRegister}
+            >
               {loading ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
