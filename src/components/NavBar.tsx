@@ -107,55 +107,24 @@ const Navbar: React.FC = () => {
   const [showGpsModal, setShowGpsModal] = useState(false);
   const [loddingGPS, setLoddingGPS] = useState(false);
 
-  const checkIfLocationIsEnabled = async (): Promise<boolean> => {
-    console.log('Entrando a checkIfLocationIsEnabled...');
-
-    const result = await requestLocationPermission();
-
-    if (result === 'blocked') {
-      console.log('PERMISO BLOQUEADO — ir a ajustes');
-
-      setShowGpsModal(true); // Abres el modal para enviar al usuario a Configuración
-      return false;
-    }
-
-    if (result === 'denied') {
-      console.log('PERMISO NEGADO — intentar otra vez');
-      return false;
-    }
-
-    // granted
-    try {
-      const position = await new Promise<GeoPosition | null>(resolve => {
-        Geolocation.getCurrentPosition(
-          pos => {
-            console.log('Ubicación obtenida:', pos.coords);
-            resolve(pos as GeoPosition);
-          },
-          error => {
-            console.log('Error obteniendo ubicación:', error);
-            resolve(null);
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-        );
-      });
-
-      return position !== null;
-    } catch (err) {
-      console.log('Unexpected error:', err);
-      return false;
-    }
-  };
-
   // const checkIfLocationIsEnabled = async (): Promise<boolean> => {
   //   console.log('Entrando a checkIfLocationIsEnabled...');
 
-  //   const hasPermission = await requestLocationPermission();
-  //   if (!hasPermission) {
-  //     console.log('No tiene permiso de ubicación');
+  //   const result = await requestLocationPermission();
+
+  //   if (result === 'blocked') {
+  //     console.log('PERMISO BLOQUEADO — ir a ajustes');
+
+  //     setShowGpsModal(true); // Abres el modal para enviar al usuario a Configuración
   //     return false;
   //   }
-  //   console.log(hasPermission);
+
+  //   if (result === 'denied') {
+  //     console.log('PERMISO NEGADO — intentar otra vez');
+  //     return false;
+  //   }
+
+  //   // granted
   //   try {
   //     const position = await new Promise<GeoPosition | null>(resolve => {
   //       Geolocation.getCurrentPosition(
@@ -164,35 +133,66 @@ const Navbar: React.FC = () => {
   //           resolve(pos as GeoPosition);
   //         },
   //         error => {
-  //           console.log('este es el error', error);
-  //           if (error.code === 1) {
-  //             console.log(
-  //               'PERMISSION_DENIED: No se dieron permisos de ubicación',
-  //             );
-  //           } else if (error.code === 2) {
-  //             console.log(
-  //               'POSITION_UNAVAILABLE: El GPS está desactivado o sin señal',
-  //             );
-  //           } else if (error.code === 3) {
-  //             console.log('TIMEOUT: No se pudo obtener ubicación a tiempo');
-  //           }
-
-  //           resolve(null); // nunca lances, siempre resuelve
+  //           console.log('Error obteniendo ubicación:', error);
+  //           resolve(null);
   //         },
-  //         {
-  //           enableHighAccuracy: false,
-  //           timeout: 20000, // 10 segundos
-  //           maximumAge: 1000,
-  //         },
+  //         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
   //       );
   //     });
 
   //     return position !== null;
-  //   } catch (e) {
-  //     console.log('Unexpected error in checkIfLocationIsEnabled:', e);
+  //   } catch (err) {
+  //     console.log('Unexpected error:', err);
   //     return false;
   //   }
   // };
+
+  const checkIfLocationIsEnabled = async (): Promise<boolean> => {
+    console.log('Entrando a checkIfLocationIsEnabled...');
+
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) {
+      console.log('No tiene permiso de ubicación');
+      return false;
+    }
+    console.log(hasPermission);
+    try {
+      const position = await new Promise<GeoPosition | null>(resolve => {
+        Geolocation.getCurrentPosition(
+          pos => {
+            console.log('Ubicación obtenida:', pos.coords);
+            resolve(pos as GeoPosition);
+          },
+          error => {
+            console.log('este es el error', error);
+            if (error.code === 1) {
+              console.log(
+                'PERMISSION_DENIED: No se dieron permisos de ubicación',
+              );
+            } else if (error.code === 2) {
+              console.log(
+                'POSITION_UNAVAILABLE: El GPS está desactivado o sin señal',
+              );
+            } else if (error.code === 3) {
+              console.log('TIMEOUT: No se pudo obtener ubicación a tiempo');
+            }
+
+            resolve(null); // nunca lances, siempre resuelve
+          },
+          {
+            enableHighAccuracy: false,
+            timeout: 20000, // 10 segundos
+            maximumAge: 1000,
+          },
+        );
+      });
+
+      return position !== null;
+    } catch (e) {
+      console.log('Unexpected error in checkIfLocationIsEnabled:', e);
+      return false;
+    }
+  };
 
   const interval = async () => {
     try {
@@ -422,7 +422,7 @@ const Navbar: React.FC = () => {
         </View>
       </Modal>
 
-      {/* <Modal visible={showGpsModal} transparent animationType="slide">
+      <Modal visible={showGpsModal} transparent animationType="slide">
         <View
           style={tw`items-center justify-center flex-1 bg-black bg-opacity-60`}
         >
@@ -436,7 +436,6 @@ const Navbar: React.FC = () => {
               Este aplicativo requer que o GPS esteja ativado para funcionar.
               Ative-o para continuar.
             </Text>
-        
 
             <TouchableOpacity
               onPress={recheckGps}
@@ -459,8 +458,8 @@ const Navbar: React.FC = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal> */}
-
+      </Modal>
+      {/* 
       <Modal visible={showGpsModal} transparent animationType="fade">
         <View style={tw`items-center justify-center flex-1 bg-black/60`}>
           <View style={tw`bg-white w-4/5 p-6 rounded-xl`}>
@@ -491,7 +490,7 @@ const Navbar: React.FC = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </Modal> */}
 
       {/* Menu desplegable del Navbar */}
       {isOpen && (
