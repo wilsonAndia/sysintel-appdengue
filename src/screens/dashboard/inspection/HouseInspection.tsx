@@ -1,5 +1,5 @@
-import React, {useEffect, useState} from 'react';
-import {BackHandler} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { BackHandler } from 'react-native';
 import {
   Alert,
   SafeAreaView,
@@ -13,27 +13,38 @@ import {
 import Geolocation from '@react-native-community/geolocation';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
-import {useNavigation} from '@react-navigation/native';
-import {NavigationProp} from '../../../helpers/types/navigationProp';
-import {ButtonRegresar} from '../../../helpers/ButtonRegresar';
-import {useDispatch, useSelector} from 'react-redux';
-import {RootState} from '../../../redux/store';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
+import { useNavigation } from '@react-navigation/native';
+import { NavigationProp } from '../../../helpers/types/navigationProp';
+import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '../../../redux/store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {setSelectedZone, Zone} from '../../../redux/zonesSlice';
-import {setInTheArea} from '../../../redux/inTheAreaSlice';
-import {PermissionsAndroid, Platform} from 'react-native';
-import {check, request, PERMISSIONS, RESULTS} from 'react-native-permissions';
+import { setSelectedZone, Zone } from '../../../redux/zonesSlice';
+import { setInTheArea } from '../../../redux/inTheAreaSlice';
+import { PermissionsAndroid, Platform } from 'react-native';
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import { getLocalHouses } from '../../../database/services/houseService';
+import { hasInternet } from '../../../helpers/checkConnection';
 
 interface House {
   id: string;
   neighborhood: string;
   street: string;
   number: string;
-  complement?: string;
-  latitude: string;
-  longitude: string;
+  complement?: string | null;
+  latitude: number;
+  longitude: number;
   responsible: string;
+
+  // campos opcionales que SOLO vienen del back
+  subdomain_name?: string;
+  sync_status?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+
+  // marca de casas guardadas localmente
+  offline?: boolean;
 }
 
 export const requestLocationPermission = async () => {
@@ -125,12 +136,70 @@ const HouseInspection = () => {
         Alert.alert('Erro', 'Não foi possível obter a localização atual.');
         console.log('Error:', error);
       },
-      {enableHighAccuracy: false, timeout: 20000, maximumAge: 1000},
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 1000 },
     );
   };
 
+  // const fetchHouses = async (latitude: number, longitude: number) => {
+  //   console.log('userReduc', userRedux);
+  //   try {
+  //     const response = await fetchAxiosToken({
+  //       url: `inspections/houses/coordinates`,
+  //       method: 'post',
+  //       body: {
+  //         latitude: Number(latitude),
+  //         longitude: Number(longitude),
+
+  //         sectorId: zone?.sectorId || '',
+  //       },
+  //       subdomain: userRedux?.subdomain,
+  //     });
+
+  //     if (response.statusCode === 200) {
+  //       setHouses(response.payload.houses);
+  //       if (zone) {
+  //         console.log('inTheArea:', response.payload.inTheArea);
+  //         dispatch(
+  //           setInTheArea({
+  //             inTheArea: response.payload.inTheArea || false,
+  //           }),
+  //         );
+  //       }
+  //     } else {
+  //       console.log('Error al obtener casas:', response.message);
+  //     }
+  //   } catch (error) {
+  //     console.log('Error:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const fetchHouses = async (latitude: number, longitude: number) => {
     console.log('userReduc', userRedux);
+
+    const connected = await hasInternet();
+
+    if (!connected) {
+      console.log('📡 Sin internet → cargar casas del cache...');
+      console.log('zone', zone?.sectorId);
+      const localHouses = await getLocalHouses(zone?.sectorId ?? '');
+      const normalizedHouses: House[] = (localHouses as any[]).map(h => ({
+        id: String(h.id),
+        neighborhood: String(h.neighborhood ?? ''),
+        street: String(h.street ?? ''),
+        number: String(h.number ?? ''),
+        complement: h.complement ?? null,
+        latitude: Number(h.latitude) || 0,
+        longitude: Number(h.longitude) || 0,
+        responsible: String(h.responsible ?? ''),
+        offline: true,
+      }));
+      setHouses(normalizedHouses);
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetchAxiosToken({
         url: `inspections/houses/coordinates`,
@@ -138,18 +207,15 @@ const HouseInspection = () => {
         body: {
           latitude: Number(latitude),
           longitude: Number(longitude),
-          // latitude: -24.948366,
-          // longitude: -53.481511,
           sectorId: zone?.sectorId || '',
         },
         subdomain: userRedux?.subdomain,
       });
 
-      // console.log('response houses/coordinates:', response.payload);
       if (response.statusCode === 200) {
         setHouses(response.payload.houses);
+
         if (zone) {
-          console.log('inTheArea:', response.payload.inTheArea);
           dispatch(
             setInTheArea({
               inTheArea: response.payload.inTheArea || false,
@@ -167,6 +233,12 @@ const HouseInspection = () => {
   };
 
   const fetchZones = async () => {
+    const connected = await hasInternet();
+    if (!connected) {
+      console.log('Sem conexão, não é possível buscar zonas');
+      return;
+    }
+
     try {
       const response = await fetchAxiosToken({
         url: `region/get/regions-by-user`,
@@ -281,7 +353,8 @@ const HouseInspection = () => {
               //   return;
               // }
               navigation.navigate('CreateHouse');
-            }}>
+            }}
+          >
             <Text style={tw`font-bold text-white`}>+ Criar Casa</Text>
           </TouchableOpacity>
         </View>
@@ -306,13 +379,28 @@ const HouseInspection = () => {
           data={houses}
           keyExtractor={house => house.id}
           contentContainerStyle={tw`px-4 py-4 flex-grow`}
-          renderItem={({item: house}) => (
+          renderItem={({ item: house }) => (
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate('HouseInspections', {id: house.id})
-              }>
+                navigation.navigate('HouseInspections', { id: house.id })
+              }
+            >
               <View
-                style={tw`p-4 mb-4 rounded-lg shadow-md bg-blue-sysintel-50`}>
+                style={tw`p-4 mb-4 rounded-lg shadow-md bg-blue-sysintel-50`}
+              >
+                {/* Punto rojo si es offline */}
+                {house.offline && (
+                  <View
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: 'red',
+                      marginRight: 10,
+                      marginTop: 6,
+                    }}
+                  />
+                )}
                 <Text style={tw`text-lg font-bold text-blue-sysintel-900`}>
                   {house.street}, {house.number} - {house.neighborhood}
                 </Text>
@@ -346,21 +434,24 @@ const HouseInspection = () => {
         animationType="slide"
         onRequestClose={() => {
           navigation.goBack();
-        }}>
+        }}
+      >
         <View
-          style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}>
+          style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}
+        >
           <View style={tw`bg-white w-4/5 rounded-lg p-4 max-h-[70%]`}>
             <Text style={tw`mb-4 text-lg font-bold`}>Seleccionar Zona</Text>
             <FlatList
               data={zones}
               keyExtractor={item => item.visitId}
-              renderItem={({item}) => (
+              renderItem={({ item }) => (
                 <TouchableOpacity
                   style={tw`py-2 border-b border-gray-300`}
                   onPress={() => {
                     handleZoneChange(item);
                     setZoneModalVisible(false);
-                  }}>
+                  }}
+                >
                   <Text style={tw`text-base text-gray-700`}>
                     {item.sectorGroup}
                   </Text>

@@ -1,30 +1,52 @@
-import {Model} from '@nozbe/watermelondb';
-import {field, relation, date} from '@nozbe/watermelondb/decorators';
+import Realm from 'realm';
+import { House } from './House';
 
-export class Inspection extends Model {
-  static table = 'inspections';
+export class Inspection extends Realm.Object {
+  _id!: Realm.BSON.ObjectId;
+  house!: House;
+  latitude!: number;
+  longitude!: number;
+  number_of_adults!: number;
+  number_of_children!: number;
+  someone_at_home!: boolean;
+  under_construction!: boolean;
+  construction_details?: string;
+  has_pets!: boolean;
+  has_pool!: boolean;
+  has_dengue_foci!: boolean;
+  completed!: boolean;
+  start_time?: Date;
+  end_time?: Date;
+  inspector_id?: string;
+  group_visit_id?: string;
+  sync_status!: string;
+  updated_at!: Date;
+  deleted_at?: Date;
 
-  @relation('houses', 'house_id') house!: any;
-
-  @field('latitude') latitude!: number;
-  @field('longitude') longitude!: number;
-  @field('number_of_adults') numberOfAdults!: number;
-  @field('number_of_children') numberOfChildren!: number;
-  @field('someone_at_home') someoneAtHome!: boolean;
-  @field('under_construction') underConstruction!: boolean;
-  @field('construction_details') constructionDetails!: string | null;
-  @field('has_pets') hasPets!: boolean;
-  @field('has_pool') hasPool!: boolean;
-  @field('has_dengue_foci') hasDengueFoci!: boolean;
-  @field('neighbor1') neighbor1!: string | null;
-  @field('neighbor2') neighbor2!: string | null;
-  @field('neighbor3') neighbor3!: string | null;
-  @field('completed') completed!: boolean;
-  @date('start_time') startTime!: Date | null;
-  @date('end_time') endTime!: Date | null;
-  @field('inspector_id') inspectorId!: string | null;
-  @field('group_visit_id') groupVisitId!: string | null;
-  @field('sync_status') syncStatusRaw!: string;
-  @date('updated_at') updatedAt!: Date;
-  @date('deleted_at') deletedAt!: Date | null;
+  static schema: Realm.ObjectSchema = {
+    name: 'Inspection',
+    primaryKey: '_id',
+    properties: {
+      _id: 'objectId',
+      house: 'House',
+      latitude: 'double',
+      longitude: 'double',
+      number_of_adults: 'int',
+      number_of_children: 'int',
+      someone_at_home: 'bool',
+      under_construction: 'bool',
+      construction_details: 'string?',
+      has_pets: 'bool',
+      has_pool: 'bool',
+      has_dengue_foci: 'bool',
+      completed: 'bool',
+      start_time: 'date?',
+      end_time: 'date?',
+      inspector_id: 'string?',
+      group_visit_id: 'string?',
+      sync_status: 'string',
+      updated_at: 'date',
+      deleted_at: 'date?',
+    },
+  };
 }
