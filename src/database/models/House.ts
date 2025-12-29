@@ -34,11 +34,6 @@ export class House extends Realm.Object {
       sync_status: 'string',
       updated_at: 'date',
       deleted_at: 'date?',
-      inspections: {
-        type: 'linkingObjects',
-        objectType: 'Inspection',
-        property: 'house',
-      },
     },
   };
 }

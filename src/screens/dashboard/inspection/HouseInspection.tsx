@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { BackHandler } from 'react-native';
 import {
   Alert,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Animated,
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import tw from '../../../../tailwind';
@@ -24,8 +25,14 @@ import { setSelectedZone, Zone } from '../../../redux/zonesSlice';
 import { setInTheArea } from '../../../redux/inTheAreaSlice';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
-import { getLocalHouses } from '../../../database/services/houseService';
+import {
+  getLocalHouses,
+  getPendingHouses,
+} from '../../../database/services/houseService';
 import { hasInternet } from '../../../helpers/checkConnection';
+import { getRealm } from '../../../database';
+import { setToken, setUser } from '../../../redux/authSlice';
+import { ApiResponse } from '../../../../App';
 
 interface House {
   id: string;
@@ -102,6 +109,86 @@ const HouseInspection = () => {
     longitude: number;
   } | null>(null);
   const [isZoneModalVisible, setZoneModalVisible] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [connected, setConnected] = useState(true);
+
+  // Animated value for blinking pending badge
+  const blinkAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loadToken = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+
+        if (token) {
+          dispatch(setToken(token));
+
+          const response: ApiResponse = await fetchAxiosToken({
+            url: `users/getOne/token`,
+            method: 'post',
+          });
+          /*  console.log(response); */
+          dispatch(
+            setUser({
+              id: response.payload.id,
+              firstName: response.payload.firstName,
+              lastName: response.payload.lastName,
+              email: response.payload.email,
+              phone: response.payload.phone,
+              avatar: response.payload.avatar,
+              first_login: response.payload.first_login,
+              subdomain: response.payload.subdomain,
+            }),
+          );
+        }
+      } catch (error) {
+        console.error('Error al cargar el token:', error);
+      }
+    };
+
+    loadToken();
+  }, [dispatch]);
+
+  useEffect(() => {
+    let animation: Animated.CompositeAnimation | null = null;
+
+    if (pendingCount > 0) {
+      // loop a fade out/in effect
+      animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(blinkAnim, {
+            toValue: 0.25,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(blinkAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      animation.start();
+    } else {
+      // reset to fully visible when there is no pending badge
+      blinkAnim.setValue(1);
+    }
+
+    return () => {
+      if (animation) animation.stop();
+    };
+  }, [pendingCount, blinkAnim]);
+
+  useEffect(() => {
+    const loadPending = async () => {
+      const hasNet = await hasInternet();
+      setConnected(Boolean(hasNet));
+      const pending = await getPendingHouses(zone?.sectorId ?? '');
+      setPendingCount(pending.length);
+    };
+
+    loadPending();
+  }, [zone]);
 
   const checkAndGetPermissions = async () => {
     const hasLocation = await requestLocationPermission();
@@ -327,6 +414,51 @@ const HouseInspection = () => {
     }
   };
 
+  async function syncPendingHouses(sectorId: string) {
+    const pending = await getPendingHouses(sectorId);
+
+    if (pending.length === 0) return [];
+    console.log('userRedux', userRedux);
+
+    const response = await fetchAxiosToken({
+      url: 'inspections/sync/houses',
+      method: 'post',
+      body: { houses: pending },
+      subdomain: userRedux?.subdomain,
+    });
+    console.log('response syncPendingHouses', response);
+    if (response.statusCode !== 201) throw new Error('Error al sincronizar');
+
+    const realm = await getRealm();
+
+    realm.write(() => {
+      response.payload.synced.forEach((item: any) => {
+        const house = realm.objectForPrimaryKey(
+          'House',
+          new Realm.BSON.ObjectId(item.local_id),
+        );
+        if (house) {
+          house.backend_id = item.backend_id;
+          house.sync_status = 'synced';
+        }
+      });
+    });
+
+    return response.payload.synced;
+  }
+
+  const syncNow = async () => {
+    try {
+      Alert.alert('Sincronizando...', 'Espere...');
+      const synced = await syncPendingHouses(zone?.sectorId!);
+      Alert.alert('Feito!', `Foram sincronizadas ${synced.length} casas.`);
+      setPendingCount(0);
+    } catch (err) {
+      console.log(err);
+      Alert.alert('Erro', 'Não foi possível sincronizar agora.');
+    }
+  };
+
   return (
     <SafeAreaView style={tw`w-full h-full bg-white `}>
       <Navbar />
@@ -339,24 +471,63 @@ const HouseInspection = () => {
           <Text style={tw`text-xl font-bold text-blue-sysintel-900`}>
             Inspeção de Casas
           </Text>
-          <TouchableOpacity
-            style={tw.style(
-              'px-4 py-2 rounded-lg',
-              inTheArea ? 'bg-blue-sysintel-800' : 'bg-blue-sysintel-200',
-            )}
-            onPress={() => {
-              // if (!inTheArea) {
-              //   Alert.alert(
-              //     'Atenção',
-              //     'Você deve estar dentro da zona para criar uma casa.',
-              //   );
-              //   return;
-              // }
-              navigation.navigate('CreateHouse');
-            }}
-          >
-            <Text style={tw`font-bold text-white`}>+ Criar Casa</Text>
-          </TouchableOpacity>
+          <View style={tw`flex-row items-center`}>
+            {/* === Botón sincronizar === */}
+            <TouchableOpacity
+              disabled={!connected || pendingCount === 0}
+              onPress={syncNow}
+              style={[
+                tw`relative px-4 py-2 rounded-lg mr-2`,
+                !connected || pendingCount === 0
+                  ? tw`bg-gray-400`
+                  : tw`bg-green-700`,
+              ]}
+            >
+              <Text style={tw`text-white font-bold`}>Sync</Text>
+
+              {pendingCount > 0 && (
+                <Animated.View
+                  style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    width: 18,
+                    height: 18,
+                    borderRadius: 9,
+                    backgroundColor: 'red',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    opacity: blinkAnim,
+                  }}
+                >
+                  <Text
+                    style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}
+                  >
+                    {pendingCount}
+                  </Text>
+                </Animated.View>
+              )}
+            </TouchableOpacity>
+            {/* === Fin botón sincronizar === */}
+            <TouchableOpacity
+              style={tw.style(
+                'px-4 py-2 rounded-lg',
+                inTheArea ? 'bg-blue-sysintel-800' : 'bg-blue-sysintel-200',
+              )}
+              onPress={() => {
+                // if (!inTheArea) {
+                //   Alert.alert(
+                //     'Atenção',
+                //     'Você deve estar dentro da zona para criar uma casa.',
+                //   );
+                //   return;
+                // }
+                navigation.navigate('CreateHouse');
+              }}
+            >
+              <Text style={tw`font-bold text-white`}>+ Criar Casa</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 

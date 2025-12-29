@@ -21,7 +21,7 @@ interface User {
   subdomain: string;
 }
 
-interface ApiResponse {
+export interface ApiResponse {
   statusCode: number;
   message: string;
   payload: User;

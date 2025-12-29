@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { use, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -43,19 +43,23 @@ const CreateHouse = () => {
     longitude,
   });
   const mapRef = useRef<MapView>(null);
-  // const getCurrentLocation = async () => {
-  //   Geolocation.getCurrentPosition(
-  //     position => {
-  //       setLatitude(position.coords.latitude);
-  //       setLongitude(position.coords.longitude);
-  //     },
-  //     error => {
-  //       Alert.alert('Erro', 'Não foi possível obter a localização atual.');
-  //       console.log('Error:', error);
-  //     },
-  //     { enableHighAccuracy: false, timeout: 30000, maximumAge: 1000 },
-  //   );
-  // };
+  const getCurrentLocation = async () => {
+    Geolocation.getCurrentPosition(
+      position => {
+        setLatitude(position.coords.latitude);
+        setLongitude(position.coords.longitude);
+      },
+      error => {
+        Alert.alert('Erro', 'Não foi possível obter a localização atual.');
+        console.log('Error:', error);
+      },
+      { enableHighAccuracy: false, timeout: 30000, maximumAge: 1000 },
+    );
+  };
+
+  useEffect(() => {
+    getCurrentLocation();
+  }, []);
 
   // const handleSubmit = async () => {
   //   if (
@@ -129,7 +133,6 @@ const CreateHouse = () => {
     };
 
     const connected = await hasInternet();
-
     try {
       if (connected) {
         const response = await fetchAxiosToken({

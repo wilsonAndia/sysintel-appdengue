@@ -47,3 +47,24 @@ export async function getLocalHouses(sectorId: string) {
     offline: !h.backend_id,
   }));
 }
+
+export async function getPendingHouses(sectorId: string) {
+  const realm = await getRealm();
+
+  const houses = realm
+    .objects('House')
+    .filtered('sync_status = "pending" AND sector_id = $0', sectorId);
+
+  console.log('⏳ Casas pendientes:', houses.length);
+
+  return houses.map(h => ({
+    id: (h._id as Realm.BSON.ObjectId).toString(),
+    neighborhood: h.neighborhood,
+    street: h.street,
+    number: h.number,
+    complement: h.complement,
+    latitude: h.latitude,
+    longitude: h.longitude,
+    responsible: h.responsible,
+  }));
+}
