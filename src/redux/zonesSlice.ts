@@ -1,4 +1,4 @@
-import {createSlice, PayloadAction} from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export interface Zone {
   regionName: string;
@@ -7,6 +7,8 @@ export interface Zone {
   sectorGroup: string;
   sectorId: string;
   inTheArea?: boolean;
+  startDate: string;
+  endDate: string;
 }
 
 interface ZoneState {
@@ -30,5 +32,5 @@ const zoneSlice = createSlice({
   },
 });
 
-export const {setSelectedZone, clearSelectedZone} = zoneSlice.actions;
+export const { setSelectedZone, clearSelectedZone } = zoneSlice.actions;
 export default zoneSlice.reducer;

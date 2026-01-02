@@ -33,6 +33,7 @@ import {
   openAppSettings,
   requestLocationPermission,
 } from '../helpers/requestLocation';
+import { hasInternet } from '../helpers/checkConnection';
 
 type GeoPosition = {
   coords: {
@@ -177,11 +178,11 @@ const Navbar: React.FC = () => {
               console.log('TIMEOUT: No se pudo obtener ubicación a tiempo');
             }
 
-            resolve(null); // nunca lances, siempre resuelve
+            resolve(null);
           },
           {
             enableHighAccuracy: false,
-            timeout: 20000, // 10 segundos
+            timeout: 30000, // 10 segundos
             maximumAge: 1000,
           },
         );
@@ -215,7 +216,7 @@ const Navbar: React.FC = () => {
     if (isOpen) {
       // Ocultar el navbar
       Animated.timing(slideAnim, {
-        toValue: -width, // Mover fuera de la pantalla
+        toValue: -width,
         duration: 300,
         useNativeDriver: true,
       }).start(() => setIsOpen(false));
@@ -223,7 +224,7 @@ const Navbar: React.FC = () => {
       setIsOpen(true);
       // Mostrar el navbar
       Animated.timing(slideAnim, {
-        toValue: 0, // Posición de inicio
+        toValue: 0,
         duration: 300,
         useNativeDriver: true,
       }).start();
@@ -236,14 +237,19 @@ const Navbar: React.FC = () => {
       dispatch(clearToken());
       dispatch(clearSelectedZone());
 
-      navigation.navigate('Login'); // Redirige a la pantalla de login
+      navigation.navigate('Login');
     } catch (error) {
       console.log('Error al cerrar sesión:', error);
-      // Opcional: Mostrar una notificación en caso de error
     }
   };
 
   const fetchZones = async () => {
+    const connected = await hasInternet();
+    if (!connected) {
+      console.log('Sem conexão, não é possível buscar zonas');
+      return;
+    }
+
     try {
       const response = await fetchAxiosToken({
         url: `region/get/regions-by-user`,
@@ -254,6 +260,18 @@ const Navbar: React.FC = () => {
     } catch (error) {
       console.log('Erro Zonass:', error);
       Alert.alert('Erro', 'Houve um problema ao obter zonas');
+    }
+  };
+
+  const formatDate = (s?: string | null) => {
+    if (!s) return '';
+    try {
+      const dateOnly = s.split('T')[0];
+      const [year, month, day] = dateOnly.split('-');
+      if (!year || !month || !day) return s;
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return s;
     }
   };
 
@@ -277,7 +295,7 @@ const Navbar: React.FC = () => {
     if (zones.length === 0) {
       fetchZones();
     }
-  }, []);
+  }, [zones]);
 
   const handleNavigate = (title: any) => {
     setIsOpen(false);
@@ -363,7 +381,15 @@ const Navbar: React.FC = () => {
 
                   {selectedZoneRedux?.groupName && (
                     <Text style={tw`text-[10px] text-blue-sysintel-900`}>
-                      {selectedZoneRedux.groupName}
+                      {selectedZoneRedux.groupName} (
+                      <Text style={tw`text-[10px] text-blue-sysintel-900`}>
+                        {formatDate(selectedZoneRedux.startDate)}
+                      </Text>
+                      {' - '}
+                      <Text style={tw`text-[10px] text-blue-sysintel-900`}>
+                        {formatDate(selectedZoneRedux.endDate)}
+                      </Text>
+                      )
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -407,7 +433,15 @@ const Navbar: React.FC = () => {
                   }}
                 >
                   <Text style={tw`text-base text-blue-sysintel-700`}>
-                    {zone.sectorGroup} - {zone.groupName}
+                    {zone.sectorGroup} - {zone.groupName} (
+                    <Text style={tw`text-[9px] text-blue-sysintel-700`}>
+                      {formatDate(zone.startDate)}
+                    </Text>
+                    {' - '}
+                    <Text style={tw`text-[9px] text-blue-sysintel-700`}>
+                      {formatDate(zone.endDate)}
+                    </Text>
+                    )
                   </Text>
                 </TouchableOpacity>
               ))}

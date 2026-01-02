@@ -7,7 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setToken, setUser } from './src/redux/authSlice';
 import { fetchAxiosToken } from './src/helpers/fetchAxiosToken';
 import { PermissionsAndroid, Platform } from 'react-native';
-/* import { database } from './src/database'; */
+import { getRealm } from './src/database';
+
 interface User {
   id: string;
   firstName: string;
@@ -20,7 +21,7 @@ interface User {
   subdomain: string;
 }
 
-interface ApiResponse {
+export interface ApiResponse {
   statusCode: number;
   message: string;
   payload: User;
@@ -49,6 +50,26 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     requestLocationPermission();
+  }, []);
+
+  useEffect(() => {
+    async function testRealm() {
+      try {
+        const realm = await getRealm();
+        console.log(
+          '🔵 Realm conectado con éxito. Versión:',
+          realm.schemaVersion,
+        );
+        console.log(
+          '📦 Tablas disponibles:',
+          realm.schema.map(s => s.name),
+        );
+      } catch (error) {
+        console.error('❌ Error al iniciar Realm:', error);
+      }
+    }
+
+    testRealm();
   }, []);
 
   useEffect(() => {

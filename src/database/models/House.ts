@@ -1,23 +1,39 @@
-// src/database/models/House.ts
-import {Model} from '@nozbe/watermelondb';
-import {field, date, children} from '@nozbe/watermelondb/decorators';
-import {Inspection} from './Inspection';
+import Realm from 'realm';
 
-export class House extends Model {
-  static table = 'houses';
+export class House extends Realm.Object {
+  _id!: Realm.BSON.ObjectId;
+  backend_id?: string;
+  neighborhood!: string;
+  street!: string;
+  number!: string;
+  complement?: string;
+  sector_id!: string;
+  latitude!: number;
+  longitude!: number;
+  responsible!: string;
+  subdomain_name?: string;
+  sync_status!: string;
+  updated_at!: Date;
+  deleted_at?: Date;
 
-  @field('neighborhood') neighborhood!: string;
-  @field('street') street!: string;
-  @field('number') number!: string;
-  @field('complement') complement!: string | null;
-  @field('latitude') latitude!: number;
-  @field('longitude') longitude!: number;
-  @field('responsible') responsible!: string;
-  @field('subdomain_name') subdomainName!: string;
-  @field('sync_status') syncStatusRaw!: string;
-
-  @date('updated_at') updatedAt!: Date;
-  @date('deleted_at') deletedAt!: Date | null;
-
-  @children('inspections') inspections!: Inspection[];
+  static schema: Realm.ObjectSchema = {
+    name: 'House',
+    primaryKey: '_id',
+    properties: {
+      _id: 'objectId',
+      backend_id: 'string?',
+      neighborhood: 'string',
+      street: 'string',
+      number: 'string',
+      sector_id: 'string',
+      complement: 'string?',
+      latitude: 'double',
+      longitude: 'double',
+      responsible: 'string',
+      subdomain_name: 'string?',
+      sync_status: 'string',
+      updated_at: 'date',
+      deleted_at: 'date?',
+    },
+  };
 }

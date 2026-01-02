@@ -1,30 +1,78 @@
-import {Model} from '@nozbe/watermelondb';
-import {field, relation, date} from '@nozbe/watermelondb/decorators';
+import Realm from 'realm';
 
-export class Inspection extends Model {
-  static table = 'inspections';
+export class Inspection extends Realm.Object {
+  _id!: Realm.BSON.ObjectId;
+  backend_id?: string; // ID del backend si ya se sincronizó
+  house_id!: string; // ID de la casa (puede ser local o de backend)
 
-  @relation('houses', 'house_id') house!: any;
+  // Datos de control
+  sync_status!: string; // 'pending' | 'synced'
+  created_at!: Date;
+  completed!: boolean;
+  someoneAtHome!: boolean;
 
-  @field('latitude') latitude!: number;
-  @field('longitude') longitude!: number;
-  @field('number_of_adults') numberOfAdults!: number;
-  @field('number_of_children') numberOfChildren!: number;
-  @field('someone_at_home') someoneAtHome!: boolean;
-  @field('under_construction') underConstruction!: boolean;
-  @field('construction_details') constructionDetails!: string | null;
-  @field('has_pets') hasPets!: boolean;
-  @field('has_pool') hasPool!: boolean;
-  @field('has_dengue_foci') hasDengueFoci!: boolean;
-  @field('neighbor1') neighbor1!: string | null;
-  @field('neighbor2') neighbor2!: string | null;
-  @field('neighbor3') neighbor3!: string | null;
-  @field('completed') completed!: boolean;
-  @date('start_time') startTime!: Date | null;
-  @date('end_time') endTime!: Date | null;
-  @field('inspector_id') inspectorId!: string | null;
-  @field('group_visit_id') groupVisitId!: string | null;
-  @field('sync_status') syncStatusRaw!: string;
-  @date('updated_at') updatedAt!: Date;
-  @date('deleted_at') deletedAt!: Date | null;
+  // Datos del formulario
+  latitude!: number;
+  longitude!: number;
+  startTime?: string;
+  endTime?: string;
+
+  numberOfAdults?: number;
+  numberOfChildren?: number;
+  underConstruction?: boolean;
+  constructionDetails?: string;
+
+  hasDengueFoci?: boolean;
+  hasPets?: boolean;
+  hasPool?: boolean;
+
+  // Arrays guardados como JSON String para simplificar en Realm
+  pets_json?: string; // string[] stringified
+  poolConditions_json?: string; // string[] stringified
+  buildingCharacteristics_json?: string; // string[] stringified
+  neighbor1?: string;
+  neighbor2?: string;
+  neighbor3?: string;
+
+  // Archivos multimedia (JSON stringified)
+  // Guardará: { uri: string, type: string, larvaeDetails: string, latitude, longitude }
+  media_json?: string;
+
+  static schema: Realm.ObjectSchema = {
+    name: 'Inspection',
+    primaryKey: '_id',
+    properties: {
+      _id: 'objectId',
+      backend_id: 'string?',
+      house_id: 'string', // Clave foránea manual
+
+      sync_status: 'string',
+      created_at: 'date',
+      completed: { type: 'bool', default: false },
+      someoneAtHome: { type: 'bool', default: true },
+
+      latitude: 'double',
+      longitude: 'double',
+      startTime: 'string?',
+      endTime: 'string?',
+
+      numberOfAdults: 'int?',
+      numberOfChildren: 'int?',
+      underConstruction: 'bool?',
+      constructionDetails: 'string?',
+
+      hasDengueFoci: 'bool?',
+      hasPets: 'bool?',
+      hasPool: 'bool?',
+
+      pets_json: 'string?',
+      poolConditions_json: 'string?',
+      buildingCharacteristics_json: 'string?',
+      neighbor1: 'string?',
+      neighbor2: 'string?',
+      neighbor3: 'string?',
+
+      media_json: 'string?', // Array de objetos multimedia
+    },
+  };
 }

@@ -1,9 +1,11 @@
-import Database from '@nozbe/watermelondb/Database';
-import {adapter} from './adapters/sqlite.adapter';
-import {House} from './models/House';
-import {Inspection} from './models/Inspection';
+import Realm from 'realm';
+import { realmConfig } from './realm';
 
-export const database = new Database({
-  adapter,
-  modelClasses: [House, Inspection],
-});
+let realmInstance: Realm | null = null;
+
+export async function getRealm(): Promise<Realm> {
+  if (!realmInstance) {
+    realmInstance = await Realm.open(realmConfig);
+  }
+  return realmInstance;
+}

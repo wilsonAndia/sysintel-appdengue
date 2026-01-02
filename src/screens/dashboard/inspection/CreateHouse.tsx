@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { use, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -21,6 +21,8 @@ import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
 import { Modal } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../redux/store';
+import { saveHouseLocal } from '../../../database/services/houseService';
+import { hasInternet } from '../../../helpers/checkConnection';
 
 const CreateHouse = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -33,6 +35,7 @@ const CreateHouse = () => {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const zone = useSelector((state: RootState) => state.zones.selectedZone);
 
   const userRedux = useSelector((state: RootState) => state.auth.user);
   console.log({
@@ -50,9 +53,57 @@ const CreateHouse = () => {
         Alert.alert('Erro', 'Não foi possível obter a localização atual.');
         console.log('Error:', error);
       },
-      { enableHighAccuracy: false, timeout: 20000, maximumAge: 1000 },
+      { enableHighAccuracy: false, timeout: 30000, maximumAge: 1000 },
     );
   };
+
+  useEffect(() => {
+    getCurrentLocation();
+  }, []);
+
+  // const handleSubmit = async () => {
+  //   if (
+  //     !neighborhood ||
+  //     !street ||
+  //     !number ||
+  //     !responsible ||
+  //     !latitude ||
+  //     !longitude
+  //   ) {
+  //     Alert.alert('Erro', 'Todos os campos são obrigatórios.');
+  //     return;
+  //   }
+
+  //   setLoading(true);
+  //   try {
+  //     const response = await fetchAxiosToken({
+  //       url: `inspections/house`,
+  //       method: 'post',
+  //       body: {
+  //         neighborhood: neighborhood.trim(),
+  //         street: street.trim(),
+  //         number: number.trim(),
+  //         complement: complement.trim(),
+  //         latitude,
+  //         longitude,
+  //         responsible: responsible.trim(),
+  //       },
+  //       subdomain: userRedux?.subdomain,
+  //     });
+
+  //     if (response.statusCode === 201) {
+  //       Alert.alert('Sucesso', 'Casa criada com sucesso!');
+  //       navigation.navigate('HouseInspection');
+  //     } else {
+  //       Alert.alert('Erro', 'Não foi possível criar a casa.');
+  //     }
+  //   } catch (error) {
+  //     console.log('Error:', error);
+  //     Alert.alert('Erro', 'Houve um problema ao criar a casa.');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const handleSubmit = async () => {
     if (
@@ -68,39 +119,67 @@ const CreateHouse = () => {
     }
 
     setLoading(true);
-    try {
-      const response = await fetchAxiosToken({
-        url: `inspections/house`,
-        method: 'post',
-        body: {
-          neighborhood: neighborhood.trim(),
-          street: street.trim(),
-          number: number.trim(),
-          complement: complement.trim(),
-          latitude,
-          longitude,
-          responsible: responsible.trim(),
-        },
-        subdomain: userRedux?.subdomain,
-      });
 
-      if (response.statusCode === 201) {
-        Alert.alert('Sucesso', 'Casa criada com sucesso!');
-        navigation.navigate('HouseInspection');
+    const newHouse = {
+      neighborhood: neighborhood.trim(),
+      street: street.trim(),
+      number: number.trim(),
+      complement: complement.trim(),
+      latitude,
+      longitude,
+      responsible: responsible.trim(),
+      subdomain: userRedux?.subdomain,
+      sector_id: zone?.sectorId,
+    };
+
+    const connected = await hasInternet();
+    try {
+      if (connected) {
+        const response = await fetchAxiosToken({
+          url: `inspections/house`,
+          method: 'post',
+          body: newHouse,
+          subdomain: userRedux?.subdomain,
+        });
+
+        if (response.statusCode === 201) {
+          await saveHouseLocal({
+            ...newHouse,
+            backend_id: response.payload.id,
+            sync_status: 'synced',
+          });
+
+          Alert.alert('Sucesso', 'Casa criada com sucesso!');
+
+          Alert.alert('Sucesso', 'Casa criada com sucesso!');
+        } else {
+          throw new Error('Falha ao criar a casa no servidor');
+        }
       } else {
-        Alert.alert('Erro', 'Não foi possível criar a casa.');
+        // SIN INTERNET → guardar localmente
+        await saveHouseLocal({
+          ...newHouse,
+          backend_id: null,
+          sync_status: 'pending',
+        });
+        Alert.alert(
+          'Offline',
+          'Sem internet, casa salva localmente e será sincronizada depois.',
+        );
       }
+
+      navigation.navigate('HouseInspection');
     } catch (error) {
       console.log('Error:', error);
-      Alert.alert('Erro', 'Houve um problema ao criar a casa.');
+      Alert.alert('Erro', 'Não foi possível salvar a casa.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    getCurrentLocation();
-  }, []);
+  // useEffect(() => {
+  //   getCurrentLocation();
+  // }, []);
 
   const animateToCurrentRegion = () => {
     if (latitude && longitude && mapRef.current) {

@@ -1,5 +1,5 @@
-import React, {useEffect, useState} from 'react';
-import {BackHandler} from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { BackHandler } from 'react-native';
 import {
   Alert,
   SafeAreaView,
@@ -9,31 +9,49 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Animated,
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
-import {useNavigation} from '@react-navigation/native';
-import {NavigationProp} from '../../../helpers/types/navigationProp';
-import {ButtonRegresar} from '../../../helpers/ButtonRegresar';
-import {useDispatch, useSelector} from 'react-redux';
-import {RootState} from '../../../redux/store';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
+import { useNavigation } from '@react-navigation/native';
+import { NavigationProp } from '../../../helpers/types/navigationProp';
+import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '../../../redux/store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {setSelectedZone, Zone} from '../../../redux/zonesSlice';
-import {setInTheArea} from '../../../redux/inTheAreaSlice';
-import {PermissionsAndroid, Platform} from 'react-native';
-import {check, request, PERMISSIONS, RESULTS} from 'react-native-permissions';
+import { setSelectedZone, Zone } from '../../../redux/zonesSlice';
+import { setInTheArea } from '../../../redux/inTheAreaSlice';
+import { PermissionsAndroid, Platform } from 'react-native';
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import {
+  getLocalHouses,
+  getPendingHouses,
+} from '../../../database/services/houseService';
+import { hasInternet } from '../../../helpers/checkConnection';
+import { getRealm } from '../../../database';
+import { setToken, setUser } from '../../../redux/authSlice';
+import { ApiResponse } from '../../../../App';
 
 interface House {
   id: string;
   neighborhood: string;
   street: string;
   number: string;
-  complement?: string;
-  latitude: string;
-  longitude: string;
+  complement?: string | null;
+  latitude: number;
+  longitude: number;
   responsible: string;
+
+  // campos opcionales que SOLO vienen del back
+  subdomain_name?: string;
+  sync_status?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+
+  // marca de casas guardadas localmente
+  offline?: boolean;
 }
 
 export const requestLocationPermission = async () => {
@@ -91,6 +109,86 @@ const HouseInspection = () => {
     longitude: number;
   } | null>(null);
   const [isZoneModalVisible, setZoneModalVisible] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [connected, setConnected] = useState(true);
+
+  // Animated value for blinking pending badge
+  const blinkAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loadToken = async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+
+        if (token) {
+          dispatch(setToken(token));
+
+          const response: ApiResponse = await fetchAxiosToken({
+            url: `users/getOne/token`,
+            method: 'post',
+          });
+          /*  console.log(response); */
+          dispatch(
+            setUser({
+              id: response.payload.id,
+              firstName: response.payload.firstName,
+              lastName: response.payload.lastName,
+              email: response.payload.email,
+              phone: response.payload.phone,
+              avatar: response.payload.avatar,
+              first_login: response.payload.first_login,
+              subdomain: response.payload.subdomain,
+            }),
+          );
+        }
+      } catch (error) {
+        console.error('Error al cargar el token:', error);
+      }
+    };
+
+    loadToken();
+  }, [dispatch]);
+
+  useEffect(() => {
+    let animation: Animated.CompositeAnimation | null = null;
+
+    if (pendingCount > 0) {
+      // loop a fade out/in effect
+      animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(blinkAnim, {
+            toValue: 0.25,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(blinkAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      animation.start();
+    } else {
+      // reset to fully visible when there is no pending badge
+      blinkAnim.setValue(1);
+    }
+
+    return () => {
+      if (animation) animation.stop();
+    };
+  }, [pendingCount, blinkAnim]);
+
+  useEffect(() => {
+    const loadPending = async () => {
+      const hasNet = await hasInternet();
+      setConnected(Boolean(hasNet));
+      const pending = await getPendingHouses(zone?.sectorId ?? '');
+      setPendingCount(pending.length);
+    };
+
+    loadPending();
+  }, [zone]);
 
   const checkAndGetPermissions = async () => {
     const hasLocation = await requestLocationPermission();
@@ -125,12 +223,70 @@ const HouseInspection = () => {
         Alert.alert('Erro', 'Não foi possível obter a localização atual.');
         console.log('Error:', error);
       },
-      {enableHighAccuracy: false, timeout: 20000, maximumAge: 1000},
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 1000 },
     );
   };
 
+  // const fetchHouses = async (latitude: number, longitude: number) => {
+  //   console.log('userReduc', userRedux);
+  //   try {
+  //     const response = await fetchAxiosToken({
+  //       url: `inspections/houses/coordinates`,
+  //       method: 'post',
+  //       body: {
+  //         latitude: Number(latitude),
+  //         longitude: Number(longitude),
+
+  //         sectorId: zone?.sectorId || '',
+  //       },
+  //       subdomain: userRedux?.subdomain,
+  //     });
+
+  //     if (response.statusCode === 200) {
+  //       setHouses(response.payload.houses);
+  //       if (zone) {
+  //         console.log('inTheArea:', response.payload.inTheArea);
+  //         dispatch(
+  //           setInTheArea({
+  //             inTheArea: response.payload.inTheArea || false,
+  //           }),
+  //         );
+  //       }
+  //     } else {
+  //       console.log('Error al obtener casas:', response.message);
+  //     }
+  //   } catch (error) {
+  //     console.log('Error:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const fetchHouses = async (latitude: number, longitude: number) => {
     console.log('userReduc', userRedux);
+
+    const connected = await hasInternet();
+
+    if (!connected) {
+      console.log('📡 Sin internet → cargar casas del cache...');
+      console.log('zone', zone?.sectorId);
+      const localHouses = await getLocalHouses(zone?.sectorId ?? '');
+      const normalizedHouses: House[] = (localHouses as any[]).map(h => ({
+        id: String(h.id),
+        neighborhood: String(h.neighborhood ?? ''),
+        street: String(h.street ?? ''),
+        number: String(h.number ?? ''),
+        complement: h.complement ?? null,
+        latitude: Number(h.latitude) || 0,
+        longitude: Number(h.longitude) || 0,
+        responsible: String(h.responsible ?? ''),
+        offline: true,
+      }));
+      setHouses(normalizedHouses);
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetchAxiosToken({
         url: `inspections/houses/coordinates`,
@@ -138,18 +294,15 @@ const HouseInspection = () => {
         body: {
           latitude: Number(latitude),
           longitude: Number(longitude),
-          // latitude: -24.948366,
-          // longitude: -53.481511,
           sectorId: zone?.sectorId || '',
         },
         subdomain: userRedux?.subdomain,
       });
 
-      // console.log('response houses/coordinates:', response.payload);
       if (response.statusCode === 200) {
         setHouses(response.payload.houses);
+
         if (zone) {
-          console.log('inTheArea:', response.payload.inTheArea);
           dispatch(
             setInTheArea({
               inTheArea: response.payload.inTheArea || false,
@@ -167,6 +320,12 @@ const HouseInspection = () => {
   };
 
   const fetchZones = async () => {
+    const connected = await hasInternet();
+    if (!connected) {
+      console.log('Sem conexão, não é possível buscar zonas');
+      return;
+    }
+
     try {
       const response = await fetchAxiosToken({
         url: `region/get/regions-by-user`,
@@ -180,6 +339,19 @@ const HouseInspection = () => {
     }
   };
 
+  // Format YYYY-MM-DD or ISO string to DD/MM/YYYY
+  const formatDate = (s?: string | null) => {
+    if (!s) return '';
+    try {
+      const dateOnly = s.split('T')[0];
+      const [year, month, day] = dateOnly.split('-');
+      if (!year || !month || !day) return s;
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return s;
+    }
+  };
+
   const handleZoneChange = async (zoneH: Zone) => {
     dispatch(
       setSelectedZone({
@@ -189,6 +361,8 @@ const HouseInspection = () => {
         sectorGroup: zoneH.sectorGroup,
         sectorId: zoneH.sectorId,
         inTheArea: (zone && zone.inTheArea) || false,
+        endDate: zoneH.endDate,
+        startDate: zoneH.startDate,
       }),
     );
     fetchHouses(location?.latitude || 0, location?.longitude || 0);
@@ -218,6 +392,8 @@ const HouseInspection = () => {
               sectorGroup: parsedZone.sectorGroup,
               sectorId: parsedZone.sectorId,
               inTheArea: (zone && zone.inTheArea) || false,
+              endDate: parsedZone.endDate,
+              startDate: parsedZone.startDate,
             }),
           );
         } else {
@@ -255,6 +431,51 @@ const HouseInspection = () => {
     }
   };
 
+  async function syncPendingHouses(sectorId: string) {
+    const pending = await getPendingHouses(sectorId);
+
+    if (pending.length === 0) return [];
+    console.log('userRedux', userRedux);
+
+    const response = await fetchAxiosToken({
+      url: 'inspections/sync/houses',
+      method: 'post',
+      body: { houses: pending },
+      subdomain: userRedux?.subdomain,
+    });
+    console.log('response syncPendingHouses', response);
+    if (response.statusCode !== 201) throw new Error('Error al sincronizar');
+
+    const realm = await getRealm();
+
+    realm.write(() => {
+      response.payload.synced.forEach((item: any) => {
+        const house = realm.objectForPrimaryKey(
+          'House',
+          new Realm.BSON.ObjectId(item.local_id),
+        );
+        if (house) {
+          house.backend_id = item.backend_id;
+          house.sync_status = 'synced';
+        }
+      });
+    });
+
+    return response.payload.synced;
+  }
+
+  const syncNow = async () => {
+    try {
+      Alert.alert('Sincronizando...', 'Espere...');
+      const synced = await syncPendingHouses(zone?.sectorId!);
+      Alert.alert('Feito!', `Foram sincronizadas ${synced.length} casas.`);
+      setPendingCount(0);
+    } catch (err) {
+      console.log(err);
+      Alert.alert('Erro', 'Não foi possível sincronizar agora.');
+    }
+  };
+
   return (
     <SafeAreaView style={tw`w-full h-full bg-white `}>
       <Navbar />
@@ -267,23 +488,63 @@ const HouseInspection = () => {
           <Text style={tw`text-xl font-bold text-blue-sysintel-900`}>
             Inspeção de Casas
           </Text>
-          <TouchableOpacity
-            style={tw.style(
-              'px-4 py-2 rounded-lg',
-              inTheArea ? 'bg-blue-sysintel-800' : 'bg-blue-sysintel-200',
-            )}
-            onPress={() => {
-              // if (!inTheArea) {
-              //   Alert.alert(
-              //     'Atenção',
-              //     'Você deve estar dentro da zona para criar uma casa.',
-              //   );
-              //   return;
-              // }
-              navigation.navigate('CreateHouse');
-            }}>
-            <Text style={tw`font-bold text-white`}>+ Criar Casa</Text>
-          </TouchableOpacity>
+          <View style={tw`flex-row items-center`}>
+            {/* === Botón sincronizar === */}
+            <TouchableOpacity
+              disabled={!connected || pendingCount === 0}
+              onPress={syncNow}
+              style={[
+                tw`relative px-4 py-2 rounded-lg mr-2`,
+                !connected || pendingCount === 0
+                  ? tw`bg-gray-400`
+                  : tw`bg-green-700`,
+              ]}
+            >
+              <Text style={tw`text-white font-bold`}>Sync</Text>
+
+              {pendingCount > 0 && (
+                <Animated.View
+                  style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    width: 18,
+                    height: 18,
+                    borderRadius: 9,
+                    backgroundColor: 'red',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    opacity: blinkAnim,
+                  }}
+                >
+                  <Text
+                    style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}
+                  >
+                    {pendingCount}
+                  </Text>
+                </Animated.View>
+              )}
+            </TouchableOpacity>
+            {/* === Fin botón sincronizar === */}
+            <TouchableOpacity
+              style={tw.style(
+                'px-4 py-2 rounded-lg',
+                inTheArea ? 'bg-blue-sysintel-800' : 'bg-blue-sysintel-200',
+              )}
+              onPress={() => {
+                // if (!inTheArea) {
+                //   Alert.alert(
+                //     'Atenção',
+                //     'Você deve estar dentro da zona para criar uma casa.',
+                //   );
+                //   return;
+                // }
+                navigation.navigate('CreateHouse');
+              }}
+            >
+              <Text style={tw`font-bold text-white`}>+ Criar Casa</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -306,13 +567,28 @@ const HouseInspection = () => {
           data={houses}
           keyExtractor={house => house.id}
           contentContainerStyle={tw`px-4 py-4 flex-grow`}
-          renderItem={({item: house}) => (
+          renderItem={({ item: house }) => (
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate('HouseInspections', {id: house.id})
-              }>
+                navigation.navigate('HouseInspections', { id: house.id })
+              }
+            >
               <View
-                style={tw`p-4 mb-4 rounded-lg shadow-md bg-blue-sysintel-50`}>
+                style={tw`p-4 mb-4 rounded-lg shadow-md bg-blue-sysintel-50`}
+              >
+                {/* Punto rojo si es offline */}
+                {house.offline && (
+                  <View
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: 'red',
+                      marginRight: 10,
+                      marginTop: 6,
+                    }}
+                  />
+                )}
                 <Text style={tw`text-lg font-bold text-blue-sysintel-900`}>
                   {house.street}, {house.number} - {house.neighborhood}
                 </Text>
@@ -346,23 +622,34 @@ const HouseInspection = () => {
         animationType="slide"
         onRequestClose={() => {
           navigation.goBack();
-        }}>
+        }}
+      >
         <View
-          style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}>
+          style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}
+        >
           <View style={tw`bg-white w-4/5 rounded-lg p-4 max-h-[70%]`}>
             <Text style={tw`mb-4 text-lg font-bold`}>Seleccionar Zona</Text>
             <FlatList
               data={zones}
               keyExtractor={item => item.visitId}
-              renderItem={({item}) => (
+              renderItem={({ item }) => (
                 <TouchableOpacity
                   style={tw`py-2 border-b border-gray-300`}
                   onPress={() => {
                     handleZoneChange(item);
                     setZoneModalVisible(false);
-                  }}>
+                  }}
+                >
                   <Text style={tw`text-base text-gray-700`}>
-                    {item.sectorGroup}
+                    {item.sectorGroup} - {item.groupName} (
+                    <Text style={tw`text-[9px] text-gray-700`}>
+                      {formatDate(item.startDate)}
+                    </Text>
+                    {' - '}
+                    <Text style={tw`text-[9px] text-gray-700`}>
+                      {formatDate(item.endDate)}
+                    </Text>
+                    )
                   </Text>
                 </TouchableOpacity>
               )}

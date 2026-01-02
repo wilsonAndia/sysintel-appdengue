@@ -29,6 +29,11 @@ import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../redux/store';
 import { API_URL } from '@env';
+import {
+  saveInspectionLocal,
+  syncPendingInspections,
+} from '../../../database/services/inspectionService';
+import { hasInternet } from '../../../helpers/checkConnection';
 type InspectionRouteProp = RouteProp<
   { Inspection: { houseId: string } },
   'Inspection'
@@ -64,6 +69,10 @@ const Inspection: React.FC = () => {
   const selectedZoneRedux = useSelector(
     (state: RootState) => state.zones.selectedZone,
   );
+
+  // Usuario actual para obtener el subdomain
+  const userRedux = useSelector((state: RootState) => state.auth.user);
+
   const [inspectionStarted, setInspectionStarted] = useState<boolean>(false);
   const [numberOfAdults, setNumberOfAdults] = useState<string>('');
   const [numberOfChildren, setNumberOfChildren] = useState<string>('');
@@ -78,7 +87,10 @@ const Inspection: React.FC = () => {
   const [petTypes, setPetTypes] = useState<string[]>([]);
   const [hasPool, setHasPool] = useState<boolean>(false);
   const [poolCondition, setPoolCondition] = useState<string[]>([]);
-  const [inspectionId, setInspectionId] = useState<string | null>(null);
+
+  // Ya no usamos inspectionId del back al inicio porque guardamos todo al final
+  // const [inspectionId, setInspectionId] = useState<string | null>(null);
+
   const [buildingCharacteristics, setBuildingCharacteristics] = useState<
     string[]
   >([]);
@@ -118,191 +130,128 @@ const Inspection: React.FC = () => {
     getLocation();
   }, []);
 
+  // === 1. INICIAR INSPECCIÓN ===
+  // Modificado: Solo inicia en memoria local. No llama al backend todavía.
   const startInspection = async () => {
     await getLocation();
     const startISO = new Date().toISOString();
     setStartTime(startISO);
     setInspectionStarted(true);
-
-    const body = {
-      someoneAtHome: true,
-      house: { id: houseId },
-      startTime: startISO,
-      latitude,
-      longitude,
-      completed: false,
-      idGroupVisit: selectedZoneRedux?.visitId,
-    };
-
-    const res = await fetchAxiosToken({
-      url: 'inspections/start',
-      method: 'post',
-      body,
-    });
-
-    console.log('data startInspection', res);
-    const created = res?.payload ?? res;
-    setInspectionId(created?.id);
+    // Eliminamos la llamada a 'inspections/start' aquí.
+    // Se enviará todo junto al final.
   };
 
-  // const startInspection = async () => {
-  //   await getLocation();
-  //   setStartTime(new Date().toISOString());
-  //   setInspectionStarted(true);
-  // };
-
-  // const noOneAtHome = async () => {
-  //   await getLocation();
-  //   setStartTime(new Date().toISOString());
-
-  //   sendInspection(false);
-  // };
-
+  // === 2. NO HAY NADIE (Flujo Unificado) ===
   const noOneAtHome = async () => {
     await getLocation();
     const now = new Date().toISOString();
-
-    const body = {
-      someoneAtHome: false,
-      house: { id: houseId },
-      startTime: now,
-      endTime: now,
-      latitude,
-      longitude,
-      completed: true, // <- se cierra
-      idGroupVisit: selectedZoneRedux?.visitId,
-    };
-
-    await fetchAxiosToken({ url: 'inspections/start', method: 'post', body });
-    Alert.alert('Sucesso', 'Inspeção registrada (sem moradores).');
-    navigation.navigate('HouseInspections', { id: houseId });
-  };
-
-  const getPresignedUrl = async (fileName: string, mimeType: string) => {
-    const token = await AsyncStorage.getItem('token');
-    const res = await axios.get(`${API_URL}inspections/media/upload-url`, {
-      params: { fileName, contentType: mimeType },
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return res.data as { url: string; key: string };
-  };
-
-  const uploadToS3 = async (
-    uri: string,
-    mimeType: string,
-    signedUrl: string,
-  ) => {
-    const resp = await fetch(uri);
-    const blob = await resp.blob();
+    setLoading(true);
 
     try {
-      const result = await fetch(signedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': mimeType },
-        body: blob,
+      // 1. Guardar en Realm SIEMPRE primero
+      await saveInspectionLocal({
+        houseId,
+        startTime: now,
+        endTime: now,
+        latitude: latitude || 0,
+        longitude: longitude || 0,
+        someoneAtHome: false,
+        completed: true,
       });
 
-      if (!result.ok) throw new Error('Erro ao subir arquivo');
-    } catch (error) {
-      console.error('Error uploading to S3:', error);
-      throw error;
-    }
-  };
-
-  const sendInspection = async (someoneAtHome: boolean) => {
-    if (!inspectionId) {
-      Alert.alert('Erro', 'A inspeção ainda não foi iniciada.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const uploadedMedia: Array<{
-        url: string;
-        type: string;
-        larvaeDetails?: string;
-        latitude: number;
-        longitude: number;
-      }> = [];
-
-      for (const file of mediaFiles) {
-        const { url: signedUrl, key } = await getPresignedUrl(
-          file.name,
-          file.type,
+      // 2. Intentar Sincronizar si hay internet
+      const connected = await hasInternet();
+      if (connected) {
+        // Ejecutamos la sincronización en segundo plano (o await si quieres bloquear)
+        // Pasamos el subdomain y el idGroupVisit necesarios para el back
+        await syncPendingInspections(
+          userRedux?.subdomain || '',
+          selectedZoneRedux?.visitId,
         );
-        await uploadToS3(file.uri, file.type, signedUrl);
-
-        uploadedMedia.push({
-          url: `${key}`,
-          type: file.type.includes('video') ? 'video' : 'image',
-          larvaeDetails: file.larvaeDetails,
-          latitude: file.latitude!,
-          longitude: file.longitude!,
-        });
+        Alert.alert('Sucesso', 'Inspeção registrada e sincronizada.');
+      } else {
+        Alert.alert(
+          'Offline',
+          'Inspeção salva no dispositivo. Será enviada depois.',
+        );
       }
 
-      // const payload = {
-      //   someoneAtHome,
-      //   house: {id: houseId},
-      //   numberOfAdults: Number(numberOfAdults) || 0,
-      //   numberOfChildren: Number(numberOfChildren) || 0,
-      //   underConstruction,
-      //   constructionDetails,
-      //   latitude,
-      //   longitude,
-      //   startTime,
-      //   endTime: new Date().toISOString(),
-      //   hasDengueFoci,
-      //   hasPets,
-      //   petTypes: JSON.stringify(petTypes),
-      //   hasPool,
-      //   poolCondition: JSON.stringify(poolCondition),
-      //   buildingCharacteristics: JSON.stringify(buildingCharacteristics),
-      //   neighborCharacteristics: JSON.stringify(neighborCharacteristics),
-      //   media: uploadedMedia,
-      //   idGroupVisit: selectedZoneRedux?.visitId,
-      // };
-
-      const payload = {
-        someoneAtHome,
-        numberOfAdults: Number(numberOfAdults) || 0,
-        numberOfChildren: Number(numberOfChildren) || 0,
-        underConstruction,
-        constructionDetails,
-        latitude,
-        longitude,
-        // startTime,
-        endTime: new Date().toISOString(), // cierre
-        hasDengueFoci,
-        hasPets,
-        pets: petTypes, // AHORA envía arrays nativos
-        hasPool,
-        poolConditions: poolCondition, // arrays nativos
-        buildingCharacteristics, // arrays nativos
-        neighbor1: neighborCharacteristics.neighbor1,
-        neighbor2: neighborCharacteristics.neighbor2,
-        neighbor3: neighborCharacteristics.neighbor3,
-        media: uploadedMedia,
-        completed: true, // <- marcar finalizada
-      };
-
-      console.log('registando inspección', payload);
-      const response = await fetchAxiosToken({
-        url: `inspections/complete/${inspectionId}`,
-        method: 'post',
-        body: payload,
-      });
-
-      Alert.alert('Sucesso', 'Inspeção realizada com sucesso!');
-      navigation.navigate('HouseInspections', { id: houseId });
+      navigation.goBack();
     } catch (error) {
       console.error(error);
-      Alert.alert('Erro', 'Houve um problema ao realizar a inspeção.');
+      Alert.alert('Erro', 'Não foi possível salvar a inspeção.');
     } finally {
       setLoading(false);
     }
   };
 
+  // === 3. FINALIZAR INSPECCIÓN (Flujo Unificado) ===
+  const sendInspection = async (someoneAtHome: boolean) => {
+    if (!inspectionStarted) {
+      Alert.alert('Erro', 'A inspeção não foi iniciada.');
+      return;
+    }
+
+    setLoading(true);
+    const endISO = new Date().toISOString();
+
+    try {
+      // 1. Recopilar todos los datos
+      const inspectionData = {
+        houseId,
+        startTime: startTime!, // Del state local
+        endTime: endISO,
+        latitude: latitude || 0,
+        longitude: longitude || 0,
+        someoneAtHome,
+        completed: true,
+
+        numberOfAdults: Number(numberOfAdults) || 0,
+        numberOfChildren: Number(numberOfChildren) || 0,
+        underConstruction,
+        constructionDetails,
+        hasDengueFoci,
+        hasPets,
+        pets: petTypes, // Array de strings
+        hasPool,
+        poolConditions: poolCondition, // Array de strings
+        buildingCharacteristics, // Array de strings
+        neighbor1: neighborCharacteristics.neighbor1,
+        neighbor2: neighborCharacteristics.neighbor2,
+        neighbor3: neighborCharacteristics.neighbor3,
+
+        mediaFiles: mediaFiles, // Array de objetos locales
+      };
+
+      // 2. Guardar en Realm (Cache Local)
+      await saveInspectionLocal(inspectionData);
+
+      // 3. Verificar Conexión y Sincronizar
+      const connected = await hasInternet();
+      if (connected) {
+        // El servicio se encarga de: leer Realm -> subir fotos S3 -> enviar JSON al back
+        await syncPendingInspections(
+          userRedux?.subdomain || '',
+          selectedZoneRedux?.visitId,
+        );
+        Alert.alert('Sucesso', 'Inspeção finalizada e sincronizada!');
+      } else {
+        Alert.alert(
+          'Offline',
+          'Inspeção salva localmente. Será enviada quando houver internet.',
+        );
+      }
+
+      navigation.goBack(); // O navigate('HouseInspections', { id: houseId })
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Erro', 'Houve um problema ao salvar a inspeção.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Funciones de Cámara y UI se mantienen igual
   const openCamera = async (mediaType: 'photo' | 'video') => {
     try {
       const options: CameraOptions = {
@@ -349,6 +298,7 @@ const Inspection: React.FC = () => {
       console.log('Error al abrir la câmera:', error);
     }
   };
+
   const removeFile = (uri: string) => {
     setMediaFiles(prev => prev.filter(file => file.uri !== uri));
   };
@@ -387,7 +337,7 @@ const Inspection: React.FC = () => {
             <>
               <TouchableOpacity
                 style={tw`p-3 mb-4 bg-blue-sysintel-900 rounded-lg`}
-                onPress={startInspection}
+                onPress={startInspection} // Usa la nueva versión local
               >
                 <Text style={tw`font-bold text-center text-white`}>
                   Realizar Inspeção
@@ -396,7 +346,7 @@ const Inspection: React.FC = () => {
 
               <TouchableOpacity
                 style={tw`p-3 bg-red-500 rounded-lg`}
-                onPress={noOneAtHome}
+                onPress={noOneAtHome} // Usa la nueva versión offline-ready
               >
                 <Text style={tw`font-bold text-center text-white`}>
                   Não havia ninguém
