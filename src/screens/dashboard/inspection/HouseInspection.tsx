@@ -339,6 +339,19 @@ const HouseInspection = () => {
     }
   };
 
+  // Format YYYY-MM-DD or ISO string to DD/MM/YYYY
+  const formatDate = (s?: string | null) => {
+    if (!s) return '';
+    try {
+      const dateOnly = s.split('T')[0];
+      const [year, month, day] = dateOnly.split('-');
+      if (!year || !month || !day) return s;
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return s;
+    }
+  };
+
   const handleZoneChange = async (zoneH: Zone) => {
     dispatch(
       setSelectedZone({
@@ -348,6 +361,8 @@ const HouseInspection = () => {
         sectorGroup: zoneH.sectorGroup,
         sectorId: zoneH.sectorId,
         inTheArea: (zone && zone.inTheArea) || false,
+        endDate: zoneH.endDate,
+        startDate: zoneH.startDate,
       }),
     );
     fetchHouses(location?.latitude || 0, location?.longitude || 0);
@@ -377,6 +392,8 @@ const HouseInspection = () => {
               sectorGroup: parsedZone.sectorGroup,
               sectorId: parsedZone.sectorId,
               inTheArea: (zone && zone.inTheArea) || false,
+              endDate: parsedZone.endDate,
+              startDate: parsedZone.startDate,
             }),
           );
         } else {
@@ -624,7 +641,15 @@ const HouseInspection = () => {
                   }}
                 >
                   <Text style={tw`text-base text-gray-700`}>
-                    {item.sectorGroup}
+                    {item.sectorGroup} - {item.groupName} (
+                    <Text style={tw`text-[9px] text-gray-700`}>
+                      {formatDate(item.startDate)}
+                    </Text>
+                    {' - '}
+                    <Text style={tw`text-[9px] text-gray-700`}>
+                      {formatDate(item.endDate)}
+                    </Text>
+                    )
                   </Text>
                 </TouchableOpacity>
               )}

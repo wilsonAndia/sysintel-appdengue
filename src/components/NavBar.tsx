@@ -263,6 +263,18 @@ const Navbar: React.FC = () => {
     }
   };
 
+  const formatDate = (s?: string | null) => {
+    if (!s) return '';
+    try {
+      const dateOnly = s.split('T')[0];
+      const [year, month, day] = dateOnly.split('-');
+      if (!year || !month || !day) return s;
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return s;
+    }
+  };
+
   useEffect(() => {
     const loadSelectedZone = async () => {
       try {
@@ -369,7 +381,15 @@ const Navbar: React.FC = () => {
 
                   {selectedZoneRedux?.groupName && (
                     <Text style={tw`text-[10px] text-blue-sysintel-900`}>
-                      {selectedZoneRedux.groupName}
+                      {selectedZoneRedux.groupName} (
+                      <Text style={tw`text-[10px] text-blue-sysintel-900`}>
+                        {formatDate(selectedZoneRedux.startDate)}
+                      </Text>
+                      {' - '}
+                      <Text style={tw`text-[10px] text-blue-sysintel-900`}>
+                        {formatDate(selectedZoneRedux.endDate)}
+                      </Text>
+                      )
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -413,7 +433,15 @@ const Navbar: React.FC = () => {
                   }}
                 >
                   <Text style={tw`text-base text-blue-sysintel-700`}>
-                    {zone.sectorGroup} - {zone.groupName}
+                    {zone.sectorGroup} - {zone.groupName} (
+                    <Text style={tw`text-[9px] text-blue-sysintel-700`}>
+                      {formatDate(zone.startDate)}
+                    </Text>
+                    {' - '}
+                    <Text style={tw`text-[9px] text-blue-sysintel-700`}>
+                      {formatDate(zone.endDate)}
+                    </Text>
+                    )
                   </Text>
                 </TouchableOpacity>
               ))}
