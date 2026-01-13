@@ -363,6 +363,9 @@ const HouseInspection = () => {
         inTheArea: (zone && zone.inTheArea) || false,
         endDate: zoneH.endDate,
         startDate: zoneH.startDate,
+        endTime: zoneH.endTime,
+        startTime: zoneH.startTime,
+        groupId: zoneH.groupId,
       }),
     );
     fetchHouses(location?.latitude || 0, location?.longitude || 0);
@@ -394,6 +397,9 @@ const HouseInspection = () => {
               inTheArea: (zone && zone.inTheArea) || false,
               endDate: parsedZone.endDate,
               startDate: parsedZone.startDate,
+              endTime: parsedZone.endTime,
+              startTime: parsedZone.startTime,
+              groupId: parsedZone.groupId,
             }),
           );
         } else {

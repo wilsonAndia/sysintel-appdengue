@@ -24,7 +24,7 @@ export const fetchAxiosToken = async ({
     'x-subdomain': subdomain || '',
   };
   /*   console.log(headers); */
-  /* console.log(`${BASE_URL}${url}`); */
+  console.log(`${BASE_URL}${url}`);
   const { data } = await axios({
     method: method || 'get',
     url: `${BASE_URL}${url}`,

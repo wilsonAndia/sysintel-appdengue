@@ -9,6 +9,10 @@ export interface Zone {
   inTheArea?: boolean;
   startDate: string;
   endDate: string;
+
+  groupId: string; // ID del grupo para saber como quién reporta
+  startTime: string; // Hora de inicio (HH:MM:SS)
+  endTime: string; // Hora de fin (HH:MM:SS)
 }
 
 interface ZoneState {

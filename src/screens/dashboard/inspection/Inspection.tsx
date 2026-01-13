@@ -167,6 +167,7 @@ const Inspection: React.FC = () => {
         await syncPendingInspections(
           userRedux?.subdomain || '',
           selectedZoneRedux?.visitId,
+          selectedZoneRedux?.groupId,
         );
         Alert.alert('Sucesso', 'Inspeção registrada e sincronizada.');
       } else {
@@ -233,6 +234,7 @@ const Inspection: React.FC = () => {
         await syncPendingInspections(
           userRedux?.subdomain || '',
           selectedZoneRedux?.visitId,
+          selectedZoneRedux?.groupId,
         );
         Alert.alert('Sucesso', 'Inspeção finalizada e sincronizada!');
       } else {

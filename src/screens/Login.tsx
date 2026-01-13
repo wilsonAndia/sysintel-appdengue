@@ -82,7 +82,7 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      console.log(`${API_URL}users/loginApp`);
+      console.log(`${API_URL}users/loginAppp`);
       const response = await axios.post(`${API_URL}users/loginApp`, {
         email: input.correo.trim().toLowerCase(),
         password: input.password,

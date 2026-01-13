@@ -116,6 +116,7 @@ async function uploadFileToS3(
 export async function syncPendingInspections(
   subdomain: string,
   idGroupVisit?: string,
+  idAgentGroup?: string,
 ) {
   const pending = await getPendingInspections();
   const realm = await getRealm();
@@ -186,7 +187,7 @@ export async function syncPendingInspections(
       const payload = {
         houseId: realHouseId,
         idGroupVisit: idGroupVisit,
-
+        idAgentGroup: idAgentGroup,
         startTime: inspection.startTime,
         endTime: inspection.endTime,
         latitude: inspection.latitude,
@@ -223,7 +224,7 @@ export async function syncPendingInspections(
         body: payload,
         subdomain,
       });
-
+      console.log(response);
       if (response.statusCode === 201 || response.id) {
         const backendId = response.payload?.id || response.id;
 
