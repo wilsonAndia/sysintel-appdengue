@@ -1,5 +1,5 @@
 // types.ts
-import {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 interface User {
   id: string;
@@ -15,29 +15,30 @@ export type RootStackParamList = {
   CambiarPassword: undefined;
   UserList: undefined;
   CreateUser: undefined;
-  UserDetail: {id: string};
-  GroupDetail: {id: string};
-  ZoneDetail: {id: string};
+  UserDetail: { id: string };
+  GroupDetail: { id: string };
+  ZoneDetail: { id: string };
   GroupList: undefined;
   CreateGroup: undefined;
   RecoverPasswordEmail: undefined;
-  RecoverPasswordCode: {user: User};
-  RecoverPasswordNew: {user: User};
+  RecoverPasswordCode: { user: User };
+  RecoverPasswordNew: { user: User };
   FirstLogin: undefined;
   GroupVisitScheduleList: undefined;
   GroupVisitScheduleCreate: undefined;
-  GroupVisitScheduleDetail: {id: string};
+  GroupVisitScheduleDetail: { id: string };
   ZoneList: undefined;
   CreateZone: undefined;
   GroupVisitSchedule: undefined;
   HouseInspection: undefined;
-  HouseInspections: {id: string};
-  Inspection: {houseId: string};
+  HouseInspections: { id: string };
+  Inspection: { houseId: string };
   CreateHouse: undefined;
-  InspectionDetail: {id: string};
-  Observations: {houseId: string};
+  InspectionDetail: { id: string };
+  Observations: { houseId: string };
   SupportTickets: undefined;
-  TicketDetail: {ticketId: string};
+  TicketDetail: { ticketId: string };
+  Welcome: undefined;
 };
 
 // Define el tipo de navegación

@@ -56,7 +56,6 @@ const Login: React.FC = () => {
   };
   console.log('API_URLlllll', API_URL);
   const handleRegister = async () => {
-    // Validación simple para campos vacíos
     Keyboard.dismiss();
     if (!input.correo || !input.password) {
       Toast.show({
@@ -77,8 +76,6 @@ const Login: React.FC = () => {
       return;
     }
 
-    // Validar si las contraseñas coinciden
-
     setLoading(true);
 
     try {
@@ -98,9 +95,15 @@ const Login: React.FC = () => {
         setLoading(false);
         Dialog.show({
           type: ALERT_TYPE.SUCCESS,
-          title: 'Éxito',
-          textBody: '',
-          autoClose: 500,
+          title: 'Sucesso',
+          textBody: 'Bem-vindo ao SysIntel',
+          autoClose: 800,
+          onHide: () => {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Welcome' }],
+            });
+          },
         });
       } else {
         console.log('error controlado');

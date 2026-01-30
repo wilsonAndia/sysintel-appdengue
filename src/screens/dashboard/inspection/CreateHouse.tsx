@@ -131,17 +131,18 @@ const CreateHouse = () => {
       subdomain: userRedux?.subdomain,
       sector_id: zone?.sectorId,
     };
-
+    console.log('New House:', newHouse);
     const connected = await hasInternet();
     try {
       if (connected) {
+        console.log('Online: enviando ao servidor');
         const response = await fetchAxiosToken({
           url: `inspections/house`,
           method: 'post',
           body: newHouse,
           subdomain: userRedux?.subdomain,
         });
-
+        console.log('Response:', response);
         if (response.statusCode === 201) {
           await saveHouseLocal({
             ...newHouse,

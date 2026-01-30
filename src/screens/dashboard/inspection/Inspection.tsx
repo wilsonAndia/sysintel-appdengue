@@ -31,6 +31,7 @@ import { RootState } from '../../../redux/store';
 import { API_URL } from '@env';
 import {
   saveInspectionLocal,
+  startInspectionService,
   syncPendingInspections,
 } from '../../../database/services/inspectionService';
 import { hasInternet } from '../../../helpers/checkConnection';
@@ -73,7 +74,6 @@ const Inspection: React.FC = () => {
   // Usuario actual para obtener el subdomain
   const userRedux = useSelector((state: RootState) => state.auth.user);
 
-  const [inspectionStarted, setInspectionStarted] = useState<boolean>(false);
   const [numberOfAdults, setNumberOfAdults] = useState<string>('');
   const [numberOfChildren, setNumberOfChildren] = useState<string>('');
   const [underConstruction, setUnderConstruction] = useState<boolean>(false);
@@ -88,8 +88,14 @@ const Inspection: React.FC = () => {
   const [hasPool, setHasPool] = useState<boolean>(false);
   const [poolCondition, setPoolCondition] = useState<string[]>([]);
 
-  // Ya no usamos inspectionId del back al inicio porque guardamos todo al final
-  // const [inspectionId, setInspectionId] = useState<string | null>(null);
+  const [inspectionStarted, setInspectionStarted] = useState<boolean>(false);
+
+  const [localInspectionId, setLocalInspectionId] = useState<
+    Realm.BSON.ObjectId | undefined
+  >(undefined);
+  const [backendInspectionId, setBackendInspectionId] = useState<string | null>(
+    null,
+  );
 
   const [buildingCharacteristics, setBuildingCharacteristics] = useState<
     string[]
@@ -118,10 +124,7 @@ const Inspection: React.FC = () => {
         setLatitude(position.coords.latitude);
         setLongitude(position.coords.longitude);
       },
-      error => {
-        Alert.alert('Erro', 'Não foi possível obter a localização atual.');
-        console.log('Error:', error);
-      },
+      error => console.log('Error Location:', error),
       { enableHighAccuracy: false, timeout: 20000, maximumAge: 1000 },
     );
   };
@@ -130,126 +133,156 @@ const Inspection: React.FC = () => {
     getLocation();
   }, []);
 
-  // === 1. INICIAR INSPECCIÓN ===
-  // Modificado: Solo inicia en memoria local. No llama al backend todavía.
+  // =======================================================
+  // 1. INICIAR INSPECCIÓN (HÍBRIDO)
+  // =======================================================
   const startInspection = async () => {
-    await getLocation();
+    if (!latitude || !longitude) {
+      await getLocation();
+    }
     const startISO = new Date().toISOString();
     setStartTime(startISO);
-    setInspectionStarted(true);
-    // Eliminamos la llamada a 'inspections/start' aquí.
-    // Se enviará todo junto al final.
-  };
-
-  // === 2. NO HAY NADIE (Flujo Unificado) ===
-  const noOneAtHome = async () => {
-    await getLocation();
-    const now = new Date().toISOString();
     setLoading(true);
 
     try {
-      // 1. Guardar en Realm SIEMPRE primero
-      await saveInspectionLocal({
+      // Llamamos al servicio que maneja local + intento online
+      const result = await startInspectionService({
         houseId,
-        startTime: now,
-        endTime: now,
         latitude: latitude || 0,
         longitude: longitude || 0,
-        someoneAtHome: false,
-        completed: true,
+        idGroupVisit: selectedZoneRedux?.visitId || '',
+        idAgentGroup: selectedZoneRedux?.groupId || '',
+        startTime: startISO,
+        subdomain: userRedux?.subdomain || '',
+        someoneAtHome: true,
       });
 
-      // 2. Intentar Sincronizar si hay internet
-      const connected = await hasInternet();
-      if (connected) {
-        // Ejecutamos la sincronización en segundo plano (o await si quieres bloquear)
-        // Pasamos el subdomain y el idGroupVisit necesarios para el back
-        await syncPendingInspections(
-          userRedux?.subdomain || '',
-          selectedZoneRedux?.visitId,
-          selectedZoneRedux?.groupId,
-        );
-        Alert.alert('Sucesso', 'Inspeção registrada e sincronizada.');
-      } else {
-        Alert.alert(
-          'Offline',
-          'Inspeção salva no dispositivo. Será enviada depois.',
-        );
-      }
+      // Guardamos IDs en el estado para usar al finalizar
+      setLocalInspectionId(result.localId);
+      setBackendInspectionId(result.backendId); // Puede ser null si falló internet
 
-      navigation.goBack();
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Erro', 'Não foi possível salvar a inspeção.');
+      setInspectionStarted(true);
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo iniciar la inspección localmente.');
     } finally {
       setLoading(false);
     }
   };
 
-  // === 3. FINALIZAR INSPECCIÓN (Flujo Unificado) ===
-  const sendInspection = async (someoneAtHome: boolean) => {
-    if (!inspectionStarted) {
-      Alert.alert('Erro', 'A inspeção não foi iniciada.');
-      return;
+  // =======================================================
+  // 2. NO HAY NADIE (HÍBRIDO)
+  // =======================================================
+  const noOneAtHome = async () => {
+    // Es buena práctica llamar a getLocation, pero si tarda mucho puede bloquear.
+    // Verificamos si ya tenemos lat/long, si no, intentamos obtenerlas.
+    if (!latitude || !longitude) {
+      await new Promise<void>(resolve => {
+        Geolocation.getCurrentPosition(
+          pos => {
+            setLatitude(pos.coords.latitude);
+            setLongitude(pos.coords.longitude);
+            resolve();
+          },
+          err => {
+            console.log(err);
+            resolve();
+          }, // Resolvemos igual para no bloquear
+          { timeout: 5000 },
+        );
+      });
     }
 
+    const now = new Date().toISOString();
+    setLoading(true);
+
+    try {
+      await saveInspectionLocal({
+        // IMPORTANTE: Si ya existía un ID local (porque se inició la inspección), lo reusamos.
+        // Si es undefined, saveInspectionLocal creará uno nuevo.
+        _id: localInspectionId,
+        backend_id: backendInspectionId,
+        created_at: new Date(),
+        houseId,
+        startTime: startTime || now, // Si ya había start time, úsalo. Si no, usa 'now'.
+        endTime: now,
+        latitude: latitude || 0,
+        longitude: longitude || 0,
+        someoneAtHome: false, // CLAVE: Esto le dice al back que no atendieron
+        completed: true,
+        idGroupVisit: selectedZoneRedux?.visitId || '',
+        idAgentGroup: selectedZoneRedux?.groupId || '',
+      });
+
+      // Intentamos sincronizar en segundo plano
+      triggerSyncBackground();
+
+      navigation.goBack();
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'No se pudo guardar la inspección.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  // =======================================================
+  // 3. FINALIZAR INSPECCIÓN
+  // =======================================================
+  const sendInspection = async (someoneAtHome: boolean) => {
+    if (!inspectionStarted) return;
     setLoading(true);
     const endISO = new Date().toISOString();
 
     try {
-      // 1. Recopilar todos los datos
-      const inspectionData = {
+      await saveInspectionLocal({
+        // IMPORTANTE: Pasamos los IDs que obtuvimos al iniciar
+        _id: localInspectionId,
+        backend_id: backendInspectionId,
+        created_at: new Date(),
         houseId,
-        startTime: startTime!, // Del state local
+        startTime: startTime!,
         endTime: endISO,
         latitude: latitude || 0,
         longitude: longitude || 0,
         someoneAtHome,
-        completed: true,
+        completed: true, // Esto activa la cola de pendientes
+        idGroupVisit: selectedZoneRedux?.visitId || '',
+        idAgentGroup: selectedZoneRedux?.groupId || '',
 
+        // Datos del Formulario
         numberOfAdults: Number(numberOfAdults) || 0,
         numberOfChildren: Number(numberOfChildren) || 0,
         underConstruction,
         constructionDetails,
         hasDengueFoci,
         hasPets,
-        pets: petTypes, // Array de strings
+        pets: petTypes,
         hasPool,
-        poolConditions: poolCondition, // Array de strings
-        buildingCharacteristics, // Array de strings
+        poolConditions: poolCondition,
+        buildingCharacteristics,
         neighbor1: neighborCharacteristics.neighbor1,
         neighbor2: neighborCharacteristics.neighbor2,
         neighbor3: neighborCharacteristics.neighbor3,
+        mediaFiles: mediaFiles,
+      });
 
-        mediaFiles: mediaFiles, // Array de objetos locales
-      };
-
-      // 2. Guardar en Realm (Cache Local)
-      await saveInspectionLocal(inspectionData);
-
-      // 3. Verificar Conexión y Sincronizar
-      const connected = await hasInternet();
-      if (connected) {
-        // El servicio se encarga de: leer Realm -> subir fotos S3 -> enviar JSON al back
-        await syncPendingInspections(
-          userRedux?.subdomain || '',
-          selectedZoneRedux?.visitId,
-          selectedZoneRedux?.groupId,
-        );
-        Alert.alert('Sucesso', 'Inspeção finalizada e sincronizada!');
-      } else {
-        Alert.alert(
-          'Offline',
-          'Inspeção salva localmente. Será enviada quando houver internet.',
-        );
-      }
-
-      navigation.goBack(); // O navigate('HouseInspections', { id: houseId })
+      Alert.alert('Éxito', 'Inspección guardada correctamente.');
+      triggerSyncBackground();
+      navigation.goBack();
     } catch (error) {
       console.error(error);
-      Alert.alert('Erro', 'Houve um problema ao salvar a inspeção.');
+      Alert.alert('Error', 'Hubo un problema al guardar.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Helper para sincronizar sin bloquear la UI
+  const triggerSyncBackground = async () => {
+    const connected = await hasInternet();
+    if (connected) {
+      await syncPendingInspections(userRedux?.subdomain || '').catch(
+        console.error,
+      );
     }
   };
 

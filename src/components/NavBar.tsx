@@ -434,11 +434,11 @@ const Navbar: React.FC = () => {
                 >
                   <Text style={tw`text-base text-blue-sysintel-700`}>
                     {zone.sectorGroup} - {zone.groupName} (
-                    <Text style={tw`text-[9px] text-blue-sysintel-700`}>
+                    <Text style={tw`text-[12px] text-blue-sysintel-700`}>
                       {formatDate(zone.startDate)}
                     </Text>
                     {' - '}
-                    <Text style={tw`text-[9px] text-blue-sysintel-700`}>
+                    <Text style={tw`text-[12px] text-blue-sysintel-700`}>
                       {formatDate(zone.endDate)}
                     </Text>
                     )

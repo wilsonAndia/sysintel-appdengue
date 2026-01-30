@@ -185,6 +185,7 @@ const HouseInspection = () => {
       setConnected(Boolean(hasNet));
       const pending = await getPendingHouses(zone?.sectorId ?? '');
       setPendingCount(pending.length);
+      // await getCurrentLocation();
     };
 
     loadPending();

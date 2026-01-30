@@ -17,7 +17,7 @@ export async function saveHouseLocal(data: any) {
       longitude: data.longitude,
       responsible: data.responsible,
       subdomain_name: data.subdomain,
-      sync_status: 'pending',
+      sync_status: data.backend_id ? 'synced' : 'pending',
       updated_at: new Date(),
       deleted_at: null,
     });

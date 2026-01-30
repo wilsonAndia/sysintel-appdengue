@@ -16,7 +16,8 @@ export class Inspection extends Realm.Object {
   longitude!: number;
   startTime?: string;
   endTime?: string;
-
+  idGroupVisit!: string;
+  idAgentGroup!: string;
   numberOfAdults?: number;
   numberOfChildren?: number;
   underConstruction?: boolean;
@@ -55,7 +56,8 @@ export class Inspection extends Realm.Object {
       longitude: 'double',
       startTime: 'string?',
       endTime: 'string?',
-
+      idGroupVisit: 'string',
+      idAgentGroup: 'string',
       numberOfAdults: 'int?',
       numberOfChildren: 'int?',
       underConstruction: 'bool?',
