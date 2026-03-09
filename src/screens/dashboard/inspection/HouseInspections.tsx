@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Svg, { Path } from 'react-native-svg';
 import {
   Alert,
   SafeAreaView,
@@ -10,6 +11,8 @@ import {
   FlatList,
   ScrollView,
   Modal,
+  TextInput,
+  Switch,
 } from 'react-native';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
@@ -53,6 +56,7 @@ interface House {
   number: string;
   responsible: string;
   inspections: Inspection[];
+  owner: boolean;
 }
 
 const HouseInspections = () => {
@@ -60,6 +64,8 @@ const HouseInspections = () => {
   const route = useRoute<InspectionRouteProp>();
   const { id } = route.params;
   const zone = useSelector((state: RootState) => state.zones.selectedZone);
+  const userRedux = useSelector((state: RootState) => state.auth.user);
+
   const inTheArea = useSelector(
     (state: RootState) => state.inTheArea.inTheArea,
   );
@@ -70,6 +76,12 @@ const HouseInspections = () => {
 
   const [mediaUrl, setMediaUrl] = useState<string>('');
   const [mediaLoading, setMediaLoading] = useState<boolean>(false);
+
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editResponsible, setEditResponsible] = useState('');
+  const [editOwner, setEditOwner] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const getInspections = async () => {
     setLoading(true);
     try {
@@ -100,6 +112,46 @@ const HouseInspections = () => {
     setMediaUrl(url);
 
     setMediaLoading(false);
+  };
+
+  const openEditModal = () => {
+    if (house) {
+      setEditResponsible(house.responsible);
+      setEditOwner(house.owner);
+      setEditModalVisible(true);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    setSavingEdit(true);
+    try {
+      const response = await fetchAxiosToken({
+        url: `inspections/house/edit/${id}`,
+        method: 'post',
+        body: {
+          responsible: editResponsible,
+          owner: editOwner,
+        },
+        subdomain: userRedux?.subdomain,
+      });
+      console.log('Resposta da edição:', response);
+      if (response.statusCode === 200 || response.id) {
+        setHouse(prevHouse =>
+          prevHouse
+            ? { ...prevHouse, responsible: editResponsible, owner: editOwner }
+            : prevHouse,
+        );
+        setEditModalVisible(false);
+        Alert.alert('Sucesso', 'Dados da casa atualizados com sucesso!');
+      } else {
+        Alert.alert('Erro', 'Falha ao atualizar os dados');
+      }
+    } catch (error) {
+      console.log('Erro ao editar casa:', error);
+      Alert.alert('Erro', 'Houve um problema ao salvar as edições');
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   useEffect(() => {
@@ -136,15 +188,39 @@ const HouseInspections = () => {
         <ButtonRegresar textColor="white" arrowColor="white" />
       </View>
       <View style={tw`flex-row items-center justify-between px-4 mt-4`}>
-        <View>
+        <View style={tw`flex-1 mr-2`}>
           <Text style={tw`text-xl font-bold text-blue-sysintel-800`}>
             Inspeções da Casa
           </Text>
           <Text style={tw`text-lg text-blue-sysintel-900`}>
             {house?.street} - {house?.number}
           </Text>
-          <Text style={tw`text-blue-sysintel-600`}>
-            Responsável: {house?.responsible}
+
+          <View style={tw`flex-row items-center mt-1`}>
+            <Text style={tw`text-blue-sysintel-600`}>
+              Responsável: {house?.responsible}
+            </Text>
+
+            {/* Botón de Edición (Ícono SVG) */}
+            <TouchableOpacity onPress={openEditModal} style={tw`ml-2`}>
+              <Svg
+                style={tw`h-5 w-5 text-blue-sysintel-600`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <Path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={tw`text-blue-sysintel-600 mt-1`}>
+            É o dono: {house?.owner ? 'Sim' : 'Não'}
           </Text>
         </View>
         <View style={tw`flex-col items-center gap-2`}>
@@ -301,6 +377,69 @@ const HouseInspections = () => {
           >
             <Text style={tw`text-white`}>Fechar</Text>
           </TouchableOpacity>
+        </View>
+      </Modal>
+      {/* Nuevo Modal para Editar Casa */}
+      <Modal
+        visible={editModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={tw`flex-1 justify-center items-center bg-black/50 px-4`}>
+          <View style={tw`bg-white w-full rounded-xl p-6 shadow-lg`}>
+            <Text style={tw`text-xl font-bold text-blue-sysintel-900 mb-4`}>
+              Editar Dados da Casa
+            </Text>
+
+            <Text style={tw`text-blue-sysintel-800 font-semibold mb-1`}>
+              Responsável
+            </Text>
+            <TextInput
+              style={tw`border border-gray-300 rounded-lg p-3 mb-4 text-black`}
+              value={editResponsible}
+              onChangeText={setEditResponsible}
+              placeholder="Nome do responsável"
+              placeholderTextColor="#9ca3af"
+            />
+
+            <View style={tw`flex-row justify-between items-center mb-6`}>
+              <Text style={tw`text-blue-sysintel-800 font-semibold`}>
+                É o dono da casa?
+              </Text>
+              <Switch
+                value={editOwner}
+                onValueChange={setEditOwner}
+                trackColor={{ false: '#d1d5db', true: '#17375e' }}
+                thumbColor={editOwner ? '#ffffff' : '#f4f3f4'}
+              />
+            </View>
+
+            <View style={tw`flex-row justify-end gap-3`}>
+              <TouchableOpacity
+                style={tw`px-4 py-2 rounded-lg bg-gray-200`}
+                onPress={() => setEditModalVisible(false)}
+                disabled={savingEdit}
+              >
+                <Text style={tw`text-gray-700 font-bold`}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={tw`px-4 py-2 rounded-lg bg-blue-sysintel-800 flex-row items-center`}
+                onPress={handleSaveEdit}
+                disabled={savingEdit}
+              >
+                {savingEdit ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#fff"
+                    style={tw`mr-2`}
+                  />
+                ) : null}
+                <Text style={tw`text-white font-bold`}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
       )

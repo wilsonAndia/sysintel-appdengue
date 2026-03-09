@@ -185,7 +185,9 @@ const HouseInspection = () => {
       setConnected(Boolean(hasNet));
       const pending = await getPendingHouses(zone?.sectorId ?? '');
       setPendingCount(pending.length);
-      // await getCurrentLocation();
+      console.log('Selected Zone:', zone);
+      setLoading(true);
+      await getCurrentLocation();
     };
 
     loadPending();
@@ -219,6 +221,8 @@ const HouseInspection = () => {
           longitude: position.coords.longitude,
         });
         await fetchHouses(position.coords.latitude, position.coords.longitude);
+
+        setLoading(false);
       },
       error => {
         Alert.alert('Erro', 'Não foi possível obter a localização atual.');

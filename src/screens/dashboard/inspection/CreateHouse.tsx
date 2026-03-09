@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   BackHandler,
+  Switch,
 } from 'react-native';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
@@ -31,6 +32,7 @@ const CreateHouse = () => {
   const [number, setNumber] = useState('');
   const [complement, setComplement] = useState('');
   const [responsible, setResponsible] = useState('');
+  const [owner, setOwner] = useState(false);
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -87,6 +89,7 @@ const CreateHouse = () => {
   //         latitude,
   //         longitude,
   //         responsible: responsible.trim(),
+  //         owner,
   //       },
   //       subdomain: userRedux?.subdomain,
   //     });
@@ -128,6 +131,7 @@ const CreateHouse = () => {
       latitude,
       longitude,
       responsible: responsible.trim(),
+      owner,
       subdomain: userRedux?.subdomain,
       sector_id: zone?.sectorId,
     };
@@ -143,6 +147,17 @@ const CreateHouse = () => {
           subdomain: userRedux?.subdomain,
         });
         console.log('Response:', response);
+
+        if (
+          response.statusCode === 500 &&
+          response.message === 'Casa duplicada'
+        ) {
+          Alert.alert(
+            'Erro',
+            'Casa duplicada: Já existe uma casa com essa localização. Por favor, verifique os dados e tente novamente.',
+          );
+          return;
+        }
         if (response.statusCode === 201) {
           await saveHouseLocal({
             ...newHouse,
@@ -157,7 +172,6 @@ const CreateHouse = () => {
           throw new Error('Falha ao criar a casa no servidor');
         }
       } else {
-        // SIN INTERNET → guardar localmente
         await saveHouseLocal({
           ...newHouse,
           backend_id: null,
@@ -276,6 +290,17 @@ const CreateHouse = () => {
           onChangeText={setResponsible}
         />
 
+        <View style={tw`flex-row justify-between items-center mb-6 px-1`}>
+          <Text style={tw`text-base font-bold text-blue-sysintel-900`}>
+            É o dono da casa?
+          </Text>
+          <Switch
+            value={owner}
+            onValueChange={setOwner}
+            trackColor={{ false: '#d1d5db', true: '#17375e' }}
+            thumbColor={owner ? '#ffffff' : '#f4f3f4'}
+          />
+        </View>
         {latitude && longitude ? (
           <>
             <Text style={tw`mb-2 text-lg font-bold text-blue-sysintel-800`}>
