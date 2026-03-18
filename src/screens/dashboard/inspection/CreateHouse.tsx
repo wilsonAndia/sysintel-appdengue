@@ -25,6 +25,26 @@ import { RootState } from '../../../redux/store';
 import { saveHouseLocal } from '../../../database/services/houseService';
 import { hasInternet } from '../../../helpers/checkConnection';
 
+const calculateDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) => {
+  const R = 6371e3;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+};
+
 const CreateHouse = () => {
   const navigation = useNavigation<NavigationProp>();
   const [neighborhood, setNeighborhood] = useState('');
@@ -40,6 +60,19 @@ const CreateHouse = () => {
   const zone = useSelector((state: RootState) => state.zones.selectedZone);
 
   const userRedux = useSelector((state: RootState) => state.auth.user);
+
+  const [isOnline, setIsOnline] = useState(true);
+  const [nearbyStreets, setNearbyStreets] = useState<string[]>([]);
+  const [loadingStreets, setLoadingStreets] = useState(false);
+  const [showStreetDropdown, setShowStreetDropdown] = useState(false);
+  const [manualStreetInput, setManualStreetInput] = useState(false);
+
+  const [nearbyNeighborhoods, setNearbyNeighborhoods] = useState<string[]>([]);
+  const [loadingNeighborhoods, setLoadingNeighborhoods] = useState(false);
+  const [showNeighborhoodDropdown, setShowNeighborhoodDropdown] =
+    useState(false);
+  const [manualNeighborhoodInput, setManualNeighborhoodInput] = useState(false);
+
   console.log({
     latitude,
     longitude,
@@ -63,51 +96,144 @@ const CreateHouse = () => {
     getCurrentLocation();
   }, []);
 
-  // const handleSubmit = async () => {
-  //   if (
-  //     !neighborhood ||
-  //     !street ||
-  //     !number ||
-  //     !responsible ||
-  //     !latitude ||
-  //     !longitude
-  //   ) {
-  //     Alert.alert('Erro', 'Todos os campos são obrigatórios.');
-  //     return;
-  //   }
+  useEffect(() => {
+    // Usamos un ref para saber si el componente sigue montado
+    // y evitar actualizar estados si el usuario ya salió de la pantalla
+    let isMounted = true;
 
-  //   setLoading(true);
-  //   try {
-  //     const response = await fetchAxiosToken({
-  //       url: `inspections/house`,
-  //       method: 'post',
-  //       body: {
-  //         neighborhood: neighborhood.trim(),
-  //         street: street.trim(),
-  //         number: number.trim(),
-  //         complement: complement.trim(),
-  //         latitude,
-  //         longitude,
-  //         responsible: responsible.trim(),
-  //         owner,
-  //       },
-  //       subdomain: userRedux?.subdomain,
-  //     });
+    const fetchLocationData = async () => {
+      // Evitamos llamar si las coordenadas son exactamente cero (a veces pasa al iniciar)
+      if (!latitude || !longitude || latitude === 0 || longitude === 0) return;
 
-  //     if (response.statusCode === 201) {
-  //       Alert.alert('Sucesso', 'Casa criada com sucesso!');
-  //       navigation.navigate('HouseInspection');
-  //     } else {
-  //       Alert.alert('Erro', 'Não foi possível criar a casa.');
-  //     }
-  //   } catch (error) {
-  //     console.log('Error:', error);
-  //     Alert.alert('Erro', 'Houve um problema ao criar a casa.');
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+      const connected = await hasInternet();
+      if (!isMounted) return;
+      setIsOnline(connected ?? true);
 
+      if (!connected) {
+        setManualStreetInput(true);
+        setManualNeighborhoodInput(true);
+        return;
+      }
+
+      setLoadingStreets(true);
+      setLoadingNeighborhoods(true);
+
+      try {
+        // --- 1. OPTIMIZACIÓN DE QUERIES ---
+        const radiusStreets = 60;
+        // Solo buscamos vías (calles)
+        const queryStreets = `[out:json][timeout:10];way(around:${radiusStreets},${latitude},${longitude})["highway"]["name"];out center;`;
+        const urlStreets = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(
+          queryStreets,
+        )}`;
+
+        // Redujimos el radio a 1500m y simplificamos la búsqueda de barrios
+        const radiusNeighborhoods = 1500;
+        const queryNeighborhoods = `[out:json][timeout:15];(node["place"~"suburb|neighbourhood"](around:${radiusNeighborhoods},${latitude},${longitude});way["place"~"suburb|neighbourhood"](around:${radiusNeighborhoods},${latitude},${longitude}););out center;`;
+        const urlNeighborhoods = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(
+          queryNeighborhoods,
+        )}`;
+
+        const [responseStreets, responseNeighborhoods] = await Promise.all([
+          fetch(urlStreets),
+          fetch(urlNeighborhoods),
+        ]);
+
+        // --- 2. VALIDACIÓN DE RESPUESTA ANTES DEL PARSEO ---
+        if (!responseStreets.ok) {
+          throw new Error(`Error API Calles: ${responseStreets.status}`);
+        }
+        if (!responseNeighborhoods.ok) {
+          throw new Error(`Error API Barrios: ${responseNeighborhoods.status}`);
+        }
+
+        // Leer los textos primero para asegurarnos de que no es HTML oculto
+        const textStreets = await responseStreets.text();
+        const textNeighborhoods = await responseNeighborhoods.text();
+
+        // Verificar que empiecen con "{"
+        if (!textStreets.trim().startsWith('{'))
+          throw new Error('API Calles no devolvió JSON');
+        if (!textNeighborhoods.trim().startsWith('{'))
+          throw new Error('API Barrios no devolvió JSON');
+
+        const dataStreets = JSON.parse(textStreets);
+        const dataNeighborhoods = JSON.parse(textNeighborhoods);
+
+        if (!isMounted) return;
+
+        // --- PROCESAR CALLES ---
+        const streetsWithDistance = (dataStreets.elements || [])
+          .filter((el: any) => el.tags?.name && el.center)
+          .map((el: any) => ({
+            name: el.tags.name,
+            distance: calculateDistance(
+              latitude,
+              longitude,
+              el.center.lat,
+              el.center.lon,
+            ),
+          }))
+          .sort((a: any, b: any) => a.distance - b.distance);
+
+        const uniqueStreets = Array.from(
+          new Set<string>(streetsWithDistance.map((s: any) => s.name)),
+        );
+        setNearbyStreets(uniqueStreets);
+
+        if (uniqueStreets.length > 0 && !street) {
+          setStreet(uniqueStreets[0]);
+          setManualStreetInput(false);
+        } else if (uniqueStreets.length === 0) {
+          setManualStreetInput(true);
+        }
+
+        // --- PROCESAR BARRIOS ---
+        const neighborhoodsWithDistance = (dataNeighborhoods.elements || [])
+          .filter(
+            (el: any) => el.tags?.name && (el.center || (el.lat && el.lon)),
+          )
+          .map((el: any) => {
+            const lat = el.center?.lat || el.lat;
+            const lon = el.center?.lon || el.lon;
+            return {
+              name: el.tags.name,
+              distance: calculateDistance(latitude, longitude, lat, lon),
+            };
+          })
+          .sort((a: any, b: any) => a.distance - b.distance);
+
+        const uniqueNeighborhoods = Array.from(
+          new Set<string>(neighborhoodsWithDistance.map((n: any) => n.name)),
+        );
+        setNearbyNeighborhoods(uniqueNeighborhoods);
+
+        if (uniqueNeighborhoods.length > 0 && !neighborhood) {
+          setNeighborhood(uniqueNeighborhoods[0]);
+          setManualNeighborhoodInput(false);
+        } else if (uniqueNeighborhoods.length === 0) {
+          setManualNeighborhoodInput(true);
+        }
+      } catch (error) {
+        console.log('Error fetching location data:', error);
+        if (isMounted) {
+          setManualStreetInput(true);
+          setManualNeighborhoodInput(true);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingStreets(false);
+          setLoadingNeighborhoods(false);
+        }
+      }
+    };
+
+    fetchLocationData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [latitude, longitude]);
   const handleSubmit = async () => {
     if (
       !neighborhood ||
@@ -245,14 +371,94 @@ const CreateHouse = () => {
         <Text style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
           Bairro:
         </Text>
+
+        {loadingNeighborhoods ? (
+          <Text style={tw`mb-2 text-gray-500`}>
+            Procurando bairros próximos...
+          </Text>
+        ) : manualNeighborhoodInput || !isOnline ? (
+          <View>
+            <TextInput
+              style={tw`p-2 mb-2 border border-blue-sysintel-700 rounded-lg text-blue-sysintel-900`}
+              placeholder="Digite o nome do bairro"
+              value={neighborhood}
+              onChangeText={setNeighborhood}
+            />
+            {isOnline && nearbyNeighborhoods.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setManualNeighborhoodInput(false)}
+              >
+                <Text style={tw`text-sm text-blue-sysintel-700 mb-2`}>
+                  Voltar para lista de bairros sugeridos
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View
+            style={tw`mb-4 border border-blue-sysintel-700 rounded-lg overflow-hidden`}
+          >
+            <TouchableOpacity
+              style={tw`p-3 bg-gray-50 flex-row justify-between items-center`}
+              onPress={() =>
+                setShowNeighborhoodDropdown(!showNeighborhoodDropdown)
+              }
+            >
+              <Text style={tw`text-blue-sysintel-900 flex-1`}>
+                {neighborhood || 'Selecione um bairro próximo'}
+              </Text>
+              <Text style={tw`text-blue-sysintel-900`}>
+                {showNeighborhoodDropdown ? '▲' : '▼'}
+              </Text>
+            </TouchableOpacity>
+
+            {showNeighborhoodDropdown && (
+              <View style={tw`bg-white border-t border-gray-200 max-h-40`}>
+                <ScrollView nestedScrollEnabled>
+                  {nearbyNeighborhoods.map((n, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={tw`p-3 border-b border-gray-100 ${
+                        neighborhood === n ? 'bg-blue-100' : ''
+                      }`}
+                      onPress={() => {
+                        setNeighborhood(n);
+                        setShowNeighborhoodDropdown(false);
+                      }}
+                    >
+                      <Text style={tw`text-blue-sysintel-900`}>{n}</Text>
+                    </TouchableOpacity>
+                  ))}
+
+                  <TouchableOpacity
+                    style={tw`p-3 bg-gray-100`}
+                    onPress={() => {
+                      setManualNeighborhoodInput(true);
+                      setShowNeighborhoodDropdown(false);
+                      setNeighborhood('');
+                    }}
+                  >
+                    <Text style={tw`text-blue-sysintel-800 font-bold`}>
+                      + O bairro não está na lista (Digitar)
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* <Text style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
+          Bairro:
+        </Text>
         <TextInput
           style={tw`p-2 mb-2 border border-blue-sysintel-700 rounded-lg text-blue-sysintel-900`}
           placeholder="Bairro"
           value={neighborhood}
           onChangeText={setNeighborhood}
-        />
+        /> */}
 
-        <Text style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
+        {/* <Text style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
           Rua:
         </Text>
         <TextInput
@@ -260,7 +466,84 @@ const CreateHouse = () => {
           placeholder="Rua"
           value={street}
           onChangeText={setStreet}
-        />
+        /> */}
+        {/* --- SECCIÓN MODIFICADA: RUA (CALLE) --- */}
+        <Text style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
+          Rua:
+        </Text>
+
+        {loadingStreets ? (
+          <Text style={tw`mb-2 text-gray-500`}>
+            Procurando ruas próximas...
+          </Text>
+        ) : manualStreetInput || !isOnline ? (
+          <View>
+            <TextInput
+              style={tw`p-2 mb-2 border border-blue-sysintel-700 rounded-lg text-blue-sysintel-900`}
+              placeholder="Digite o nome da rua"
+              value={street}
+              onChangeText={setStreet}
+            />
+            {isOnline && nearbyStreets.length > 0 && (
+              <TouchableOpacity onPress={() => setManualStreetInput(false)}>
+                <Text style={tw`text-sm text-blue-sysintel-700 mb-2`}>
+                  Voltar para lista de ruas sugeridas
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View
+            style={tw`mb-2 border border-blue-sysintel-700 rounded-lg overflow-hidden`}
+          >
+            <TouchableOpacity
+              style={tw`p-3 bg-gray-50 flex-row justify-between items-center`}
+              onPress={() => setShowStreetDropdown(!showStreetDropdown)}
+            >
+              <Text style={tw`text-blue-sysintel-900 flex-1`}>
+                {street || 'Selecione uma rua próxima'}
+              </Text>
+              <Text style={tw`text-blue-sysintel-900`}>
+                {showStreetDropdown ? '▲' : '▼'}
+              </Text>
+            </TouchableOpacity>
+
+            {showStreetDropdown && (
+              <View style={tw`bg-white border-t border-gray-200 max-h-40`}>
+                <ScrollView nestedScrollEnabled>
+                  {nearbyStreets.map((s, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={tw`p-3 border-b border-gray-100 ${
+                        street === s ? 'bg-blue-100' : ''
+                      }`}
+                      onPress={() => {
+                        setStreet(s);
+                        setShowStreetDropdown(false);
+                      }}
+                    >
+                      <Text style={tw`text-blue-sysintel-900`}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+
+                  <TouchableOpacity
+                    style={tw`p-3 bg-gray-100`}
+                    onPress={() => {
+                      setManualStreetInput(true);
+                      setShowStreetDropdown(false);
+                      setStreet(''); // Limpiamos para que escriba
+                    }}
+                  >
+                    <Text style={tw`text-blue-sysintel-800 font-bold`}>
+                      + A rua não está na lista (Digitar)
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        )}
+        {/* --- FIN SECCIÓN RUA --- */}
         <Text style={tw`mb-2 text-base font-bold text-blue-sysintel-900`}>
           Número:
         </Text>
