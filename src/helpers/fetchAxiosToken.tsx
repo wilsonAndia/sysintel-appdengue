@@ -19,12 +19,23 @@ export const fetchAxiosToken = async ({
   const BASE_URL = API_URL;
   let token = await AsyncStorage.getItem('token');
 
-  const headers = {
+  const headers: any = {
     Authorization: `Bearer ${token}`,
     'x-subdomain': subdomain || '',
   };
-  /*   console.log(headers); */
-  console.log(`${BASE_URL}${url}`);
+
+  /*  if (isFormData) {
+    headers['Content-Type'] = 'multipart/form-data';
+  } */
+
+  console.log({
+    url,
+    method,
+    body,
+    subdomain,
+    isFormData,
+    headers,
+  });
   const { data } = await axios({
     method: method || 'get',
     url: `${BASE_URL}${url}`,

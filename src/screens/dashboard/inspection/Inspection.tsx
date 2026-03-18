@@ -11,6 +11,7 @@ import {
   Image,
   ActivityIndicator,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import tw from '../../../../tailwind';
 import * as ImagePicker from 'react-native-image-picker';
@@ -140,86 +141,59 @@ const Inspection: React.FC = () => {
     if (!latitude || !longitude) {
       await getLocation();
     }
-    const startISO = new Date().toISOString();
-    setStartTime(startISO);
-    setLoading(true);
-
-    try {
-      // Llamamos al servicio que maneja local + intento online
-      const result = await startInspectionService({
-        houseId,
-        latitude: latitude || 0,
-        longitude: longitude || 0,
-        idGroupVisit: selectedZoneRedux?.visitId || '',
-        idAgentGroup: selectedZoneRedux?.groupId || '',
-        startTime: startISO,
-        subdomain: userRedux?.subdomain || '',
-        someoneAtHome: true,
-      });
-
-      // Guardamos IDs en el estado para usar al finalizar
-      setLocalInspectionId(result.localId);
-      setBackendInspectionId(result.backendId); // Puede ser null si falló internet
-
-      setInspectionStarted(true);
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo iniciar la inspección localmente.');
-    } finally {
-      setLoading(false);
-    }
+    setStartTime(new Date().toISOString());
+    setInspectionStarted(true);
   };
 
   // =======================================================
   // 2. NO HAY NADIE (HÍBRIDO)
   // =======================================================
   const noOneAtHome = async () => {
-    // Es buena práctica llamar a getLocation, pero si tarda mucho puede bloquear.
-    // Verificamos si ya tenemos lat/long, si no, intentamos obtenerlas.
     if (!latitude || !longitude) {
-      await new Promise<void>(resolve => {
-        Geolocation.getCurrentPosition(
-          pos => {
-            setLatitude(pos.coords.latitude);
-            setLongitude(pos.coords.longitude);
-            resolve();
-          },
-          err => {
-            console.log(err);
-            resolve();
-          }, // Resolvemos igual para no bloquear
-          { timeout: 5000 },
-        );
-      });
+      await getLocation();
     }
 
-    const now = new Date().toISOString();
     setLoading(true);
-
     try {
-      await saveInspectionLocal({
-        // IMPORTANTE: Si ya existía un ID local (porque se inició la inspección), lo reusamos.
-        // Si es undefined, saveInspectionLocal creará uno nuevo.
-        _id: localInspectionId,
-        backend_id: backendInspectionId,
-        created_at: new Date(),
-        houseId,
-        startTime: startTime || now, // Si ya había start time, úsalo. Si no, usa 'now'.
-        endTime: now,
-        latitude: latitude || 0,
-        longitude: longitude || 0,
-        someoneAtHome: false, // CLAVE: Esto le dice al back que no atendieron
-        completed: true,
+      const payload = {
+        house: { id: houseId },
         idGroupVisit: selectedZoneRedux?.visitId || '',
         idAgentGroup: selectedZoneRedux?.groupId || '',
+        startTime: startTime || new Date().toISOString(),
+        endTime: new Date().toISOString(),
+        latitude: latitude || 0,
+        longitude: longitude || 0,
+        someoneAtHome: false,
+        completed: true,
+
+        numberOfAdults: 0,
+        numberOfChildren: 0,
+        underConstruction: false,
+        constructionDetails: '',
+        hasDengueFoci: false,
+        hasPets: false,
+        hasPool: false,
+        pets: [],
+        poolConditions: [],
+        buildingCharacteristics: [],
+        neighborCharacteristics: {
+          neighbor1: '',
+          neighbor2: '',
+          neighbor3: '',
+        },
+      };
+
+      const response = await fetchAxiosToken({
+        url: `inspections/createInspection`,
+        body: payload,
+        method: 'post',
       });
 
-      // Intentamos sincronizar en segundo plano
-      triggerSyncBackground();
-
+      Alert.alert('Sucesso', 'Visita registrada (Não havia ninguém).');
       navigation.goBack();
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'No se pudo guardar la inspección.');
+      console.error('Error noOneAtHome:', error);
+      Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
     } finally {
       setLoading(false);
     }
@@ -230,47 +204,117 @@ const Inspection: React.FC = () => {
   const sendInspection = async (someoneAtHome: boolean) => {
     if (!inspectionStarted) return;
     setLoading(true);
-    const endISO = new Date().toISOString();
 
     try {
-      await saveInspectionLocal({
-        // IMPORTANTE: Pasamos los IDs que obtuvimos al iniciar
-        _id: localInspectionId,
-        backend_id: backendInspectionId,
-        created_at: new Date(),
-        houseId,
-        startTime: startTime!,
-        endTime: endISO,
-        latitude: latitude || 0,
-        longitude: longitude || 0,
-        someoneAtHome,
-        completed: true, // Esto activa la cola de pendientes
-        idGroupVisit: selectedZoneRedux?.visitId || '',
-        idAgentGroup: selectedZoneRedux?.groupId || '',
+      const formData = new FormData();
 
-        // Datos del Formulario
-        numberOfAdults: Number(numberOfAdults) || 0,
-        numberOfChildren: Number(numberOfChildren) || 0,
-        underConstruction,
-        constructionDetails,
-        hasDengueFoci,
-        hasPets,
-        pets: petTypes,
-        hasPool,
-        poolConditions: poolCondition,
-        buildingCharacteristics,
-        neighbor1: neighborCharacteristics.neighbor1,
-        neighbor2: neighborCharacteristics.neighbor2,
-        neighbor3: neighborCharacteristics.neighbor3,
-        mediaFiles: mediaFiles,
+      // --- Datos Básicos ---
+      // IMPORTANTE: En FormData todo debe ser string. Tu backend usará Number() y parseBool()
+      formData.append('house[id]', houseId);
+      formData.append('idGroupVisit', selectedZoneRedux?.visitId || '');
+      formData.append('idAgentGroup', selectedZoneRedux?.groupId || '');
+      formData.append('startTime', startTime!);
+      formData.append('endTime', new Date().toISOString());
+      formData.append('latitude', String(latitude || 0));
+      formData.append('longitude', String(longitude || 0));
+      formData.append('someoneAtHome', String(someoneAtHome));
+
+      // --- Datos del Formulario ---
+      formData.append('numberOfAdults', numberOfAdults || '0');
+      formData.append('numberOfChildren', numberOfChildren || '0');
+      formData.append('underConstruction', String(underConstruction));
+      formData.append('constructionDetails', constructionDetails || '');
+      formData.append('hasDengueFoci', String(hasDengueFoci));
+      formData.append('hasPets', String(hasPets));
+      formData.append('hasPool', String(hasPool));
+
+      // --- Arreglos y Objetos ---
+      // Se envían como JSON stringificados para que el backend los lea
+      formData.append('pets', JSON.stringify(petTypes));
+      formData.append('poolConditions', JSON.stringify(poolCondition));
+      formData.append(
+        'buildingCharacteristics',
+        JSON.stringify(buildingCharacteristics),
+      );
+      formData.append(
+        'neighborCharacteristics',
+        JSON.stringify(neighborCharacteristics),
+      );
+
+      // --- Archivos Media (Fotos/Videos) ---
+      mediaFiles.forEach((file, index) => {
+        // 1. Enviamos el archivo físico
+
+        const fileUri =
+          Platform.OS === 'android' &&
+          !file.uri.startsWith('content://') &&
+          !file.uri.startsWith('file://')
+            ? `file://${file.uri}`
+            : file.uri;
+
+        formData.append('inspection', {
+          uri: fileUri,
+          type: file.type,
+          name: file.name,
+        } as any);
+
+        // 2. Enviamos la metadata relacionada a ese archivo (en la misma posición del index)
+        formData.append(`larvaeDetails[${index}]`, file.larvaeDetails);
+        formData.append(`mediaLat[${index}]`, String(file.latitude));
+        formData.append(`mediaLng[${index}]`, String(file.longitude));
       });
 
-      Alert.alert('Éxito', 'Inspección guardada correctamente.');
-      triggerSyncBackground();
+      // == LLAMADA DIRECTA AL API ==
+
+      try {
+        const token = await AsyncStorage.getItem('token');
+        console.log(
+          `Enviando con FETCH a: ${API_URL}/inspections/createInspection`,
+        );
+
+        const response = await fetch(`${API_URL}inspections/createInspection`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-subdomain': userRedux?.subdomain || '',
+            Accept: 'application/json',
+            // 🚨 AQUÍ NO PONEMOS CONTENT-TYPE. FETCH LO HACE 100% AUTOMÁTICO 🚨
+          },
+          body: formData,
+        });
+
+        // Si el backend lanza un error (ej. 400 o 500), lo atrapamos aquí
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Error del backend:', errorData);
+          Alert.alert(
+            'Erro',
+            `O servidor rejeitou a imagem: ${JSON.stringify(errorData)}`,
+          );
+          return; // Salimos de la función
+        }
+
+        // Si todo sale bien:
+        const data = await response.json();
+        console.log('¡Subida exitosa!', data);
+
+        Alert.alert('Sucesso', 'Inspeção guardada corretamente no servidor.');
+        navigation.goBack();
+      } catch (error) {
+        console.error('Error con fetch:', error);
+        Alert.alert(
+          'Erro de Rede',
+          'Não foi possível conectar ao servidor para enviar a imagem.',
+        );
+      } finally {
+        setLoading(false);
+      }
+
+      Alert.alert('Sucesso', 'Inspeção guardada corretamente no servidor.');
       navigation.goBack();
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Hubo un problema al guardar.');
+      console.error('Error sendInspection:', error);
+      Alert.alert('Erro', 'Houve um problema ao guardar no servidor.');
     } finally {
       setLoading(false);
     }
