@@ -86,7 +86,7 @@ const Login: React.FC = () => {
       });
 
       const data = response.data;
-      console.log(data);
+      console.log('data', data);
       if (data.message === 'Ok') {
         const { accessToken, user } = data.payload;
         dispatch(setUser(user));

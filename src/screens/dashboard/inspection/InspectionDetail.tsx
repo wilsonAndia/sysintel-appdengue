@@ -111,7 +111,7 @@ const InspectionDetail: React.FC = () => {
         if (response.url) {
           return response.url;
         } else {
-          console.warn('No se pudo obtener pre-signed URL del video');
+          console.warn('No se pudo obtener pre-signed URL del video.');
           return '';
         }
       } catch (error) {
