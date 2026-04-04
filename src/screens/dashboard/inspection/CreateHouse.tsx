@@ -96,6 +96,35 @@ const CreateHouse = () => {
     getCurrentLocation();
   }, []);
 
+  const fetchWithRetry = async (
+    url: string,
+    retries = 2,
+  ): Promise<Response> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url);
+
+        if (response.ok) return response;
+
+        if (response.status === 504 || response.status === 429) {
+          console.log(
+            `Intento ${i + 1} falló con código ${
+              response.status
+            }. Reintentando...`,
+          );
+          await new Promise<void>(res => setTimeout(() => res(), 1500));
+          continue;
+        }
+
+        throw new Error(`Error HTTP: ${response.status}`);
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        await new Promise<void>(res => setTimeout(() => res(), 1500));
+      }
+    }
+    throw new Error('Falló la petición después de varios intentos');
+  };
+
   useEffect(() => {
     // Usamos un ref para saber si el componente sigue montado
     // y evitar actualizar estados si el usuario ya salió de la pantalla
@@ -121,31 +150,25 @@ const CreateHouse = () => {
       try {
         // --- 1. OPTIMIZACIÓN DE QUERIES ---
         const radiusStreets = 60;
-        // Solo buscamos vías (calles)
         const queryStreets = `[out:json][timeout:10];way(around:${radiusStreets},${latitude},${longitude})["highway"]["name"];out center;`;
         const urlStreets = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(
           queryStreets,
         )}`;
 
-        // Redujimos el radio a 1500m y simplificamos la búsqueda de barrios
         const radiusNeighborhoods = 1500;
         const queryNeighborhoods = `[out:json][timeout:15];(node["place"~"suburb|neighbourhood"](around:${radiusNeighborhoods},${latitude},${longitude});way["place"~"suburb|neighbourhood"](around:${radiusNeighborhoods},${latitude},${longitude}););out center;`;
         const urlNeighborhoods = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(
           queryNeighborhoods,
         )}`;
 
+        // --- USAMOS EL SISTEMA DE REINTENTOS AQUÍ ---
         const [responseStreets, responseNeighborhoods] = await Promise.all([
-          fetch(urlStreets),
-          fetch(urlNeighborhoods),
+          fetchWithRetry(urlStreets, 2), // Intentará hasta 2 veces si da error 504
+          fetchWithRetry(urlNeighborhoods, 2),
         ]);
 
-        // --- 2. VALIDACIÓN DE RESPUESTA ANTES DEL PARSEO ---
-        if (!responseStreets.ok) {
-          throw new Error(`Error API Calles: ${responseStreets.status}`);
-        }
-        if (!responseNeighborhoods.ok) {
-          throw new Error(`Error API Barrios: ${responseNeighborhoods.status}`);
-        }
+        // (Ya puedes borrar los "if (!responseStreets.ok)" que tenías aquí,
+        // porque fetchWithRetry asegura que la respuesta sea exitosa)
 
         // Leer los textos primero para asegurarnos de que no es HTML oculto
         const textStreets = await responseStreets.text();
