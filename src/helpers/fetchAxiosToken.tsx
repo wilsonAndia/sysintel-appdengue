@@ -29,7 +29,7 @@ export const fetchAxiosToken = async ({
   } */
 
   console.log({
-    url,
+    BASE_URL,
     method,
     body,
     subdomain,

@@ -1,70 +1,35 @@
-import Realm from 'realm';
-import { getRealm } from '../index';
+import { database } from '../index'; // La ruta a tu archivo index.ts de WatermelonDB
+import House from '../models/House';
+import uuid from 'react-native-uuid'; // Para generar UUIDs válidos para tu PostgreSQL
+import { Q } from '@nozbe/watermelondb';
+export const saveHouseInWatermelonDB = async (houseData: any) => {
+  // WatermelonDB requiere que toda escritura se haga dentro de un "action"
+  await database.write(async () => {
+    // Apuntamos a la colección de casas
+    const housesCollection = database.get<House>('houses');
 
-export async function saveHouseLocal(data: any) {
-  const realm = await getRealm();
+    // Creamos el registro localmente
+    await housesCollection.create(house => {
+      // Le forzamos un UUID válido (vital para evitar el error de PostgreSQL que tuvimos)
+      house._raw.id = uuid.v4() as string;
 
-  realm.write(() => {
-    realm.create('House', {
-      _id: new Realm.BSON.ObjectId(),
-      backend_id: data.backend_id || null,
-      neighborhood: data.neighborhood,
-      sector_id: data.sector_id,
-      street: data.street,
-      number: data.number,
-      complement: data.complement,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      responsible: data.responsible,
-      subdomain_name: data.subdomain,
-      sync_status: data.backend_id ? 'synced' : 'pending',
-      updated_at: new Date(),
-      deleted_at: null,
+      house.neighborhood = houseData.neighborhood;
+      house.street = houseData.street;
+      house.number = houseData.number;
+      house.complement = houseData.complement || '';
+      house.latitude = houseData.latitude;
+      house.longitude = houseData.longitude;
+      house.responsible = houseData.responsible;
+      house.owner = houseData.owner;
+      house.subdomain = houseData.subdomain || '';
+      house.sectorId = houseData.sector_id || '';
     });
   });
+};
 
-  console.log('💾 Casa guardada localmente (offline).');
-}
-
-export async function getLocalHouses(sectorId: string) {
-  const realm = await getRealm();
-  const houses = realm
-    .objects('House')
-    .filtered('deleted_at = null AND sector_id = $0', sectorId);
-
-  console.log('📦 Casas en cache para esta zona:', houses.length);
-
-  return houses.map(h => ({
-    id: (h._id as Realm.BSON.ObjectId).toString(),
-    backend_id: h.backend_id || null,
-    neighborhood: h.neighborhood,
-    street: h.street,
-    number: h.number,
-    complement: h.complement,
-    latitude: h.latitude,
-    longitude: h.longitude,
-    responsible: h.responsible,
-    offline: !h.backend_id,
-  }));
-}
-
-export async function getPendingHouses(sectorId: string) {
-  const realm = await getRealm();
-
-  const houses = realm
-    .objects('House')
-    .filtered('sync_status = "pending" AND sector_id = $0', sectorId);
-
-  console.log('⏳ Casas pendientes:', houses.length);
-
-  return houses.map(h => ({
-    id: (h._id as Realm.BSON.ObjectId).toString(),
-    neighborhood: h.neighborhood,
-    street: h.street,
-    number: h.number,
-    complement: h.complement,
-    latitude: h.latitude,
-    longitude: h.longitude,
-    responsible: h.responsible,
-  }));
-}
+export const observeHousesBySector = (sectorId: string) => {
+  return database.collections
+    .get<House>('houses')
+    .query(Q.where('sector_id', sectorId))
+    .observe(); // .observe() es la magia que lo hace reactivo
+};

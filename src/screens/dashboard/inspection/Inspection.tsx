@@ -30,12 +30,12 @@ import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../redux/store';
 import { API_URL } from '@env';
-import {
-  saveInspectionLocal,
-  startInspectionService,
-  syncPendingInspections,
-} from '../../../database/services/inspectionService';
+
 import { hasInternet } from '../../../helpers/checkConnection';
+import {
+  saveFullInspection,
+  saveNoOneAtHomeInspection,
+} from '../../../database/services/inspectionService';
 type InspectionRouteProp = RouteProp<
   { Inspection: { houseId: string } },
   'Inspection'
@@ -91,13 +91,6 @@ const Inspection: React.FC = () => {
 
   const [inspectionStarted, setInspectionStarted] = useState<boolean>(false);
 
-  const [localInspectionId, setLocalInspectionId] = useState<
-    Realm.BSON.ObjectId | undefined
-  >(undefined);
-  const [backendInspectionId, setBackendInspectionId] = useState<string | null>(
-    null,
-  );
-
   const [buildingCharacteristics, setBuildingCharacteristics] = useState<
     string[]
   >([]);
@@ -152,48 +145,24 @@ const Inspection: React.FC = () => {
     if (!latitude || !longitude) {
       await getLocation();
     }
-
     setLoading(true);
+
     try {
-      const payload = {
-        house: { id: houseId },
-        idGroupVisit: selectedZoneRedux?.visitId || '',
-        idAgentGroup: selectedZoneRedux?.groupId || '',
-        startTime: startTime || new Date().toISOString(),
-        endTime: new Date().toISOString(),
-        latitude: latitude || 0,
-        longitude: longitude || 0,
-        someoneAtHome: false,
-        completed: true,
+      // 🍉 Llamamos al servicio limpio
+      await saveNoOneAtHomeInspection(
+        houseId,
+        userRedux,
+        selectedZoneRedux,
+        latitude || 0,
+        longitude || 0,
+        startTime,
+      );
 
-        numberOfAdults: 0,
-        numberOfChildren: 0,
-        underConstruction: false,
-        constructionDetails: '',
-        hasDengueFoci: false,
-        hasPets: false,
-        hasPool: false,
-        pets: [],
-        poolConditions: [],
-        buildingCharacteristics: [],
-        neighborCharacteristics: {
-          neighbor1: '',
-          neighbor2: '',
-          neighbor3: '',
-        },
-      };
-
-      const response = await fetchAxiosToken({
-        url: `inspections/createInspection`,
-        body: payload,
-        method: 'post',
-      });
-
-      Alert.alert('Sucesso', 'Visita registrada (Não havia ninguém).');
+      Alert.alert('Sucesso', 'Visita registrada (Não havia ninguém)');
       navigation.goBack();
     } catch (error) {
       console.error('Error noOneAtHome:', error);
-      Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
+      Alert.alert('Erro', 'Não foi possível guardar localmente.');
     } finally {
       setLoading(false);
     }
@@ -206,127 +175,44 @@ const Inspection: React.FC = () => {
     setLoading(true);
 
     try {
-      const formData = new FormData();
+      // Empaquetamos todo el estado para enviarlo al servicio
+      const inspectionData = {
+        numberOfAdults,
+        numberOfChildren,
+        underConstruction,
+        constructionDetails,
+        someoneAtHome,
+        latitude,
+        longitude,
+        startTime,
+        hasPets,
+        hasPool,
+        hasDengueFoci,
+        neighborCharacteristics,
+        petTypes,
+        poolCondition,
+        buildingCharacteristics,
+        mediaFiles,
+      };
 
-      // --- Datos Básicos ---
-      // IMPORTANTE: En FormData todo debe ser string. Tu backend usará Number() y parseBool()
-      formData.append('house[id]', houseId);
-      formData.append('idGroupVisit', selectedZoneRedux?.visitId || '');
-      formData.append('idAgentGroup', selectedZoneRedux?.groupId || '');
-      formData.append('startTime', startTime!);
-      formData.append('endTime', new Date().toISOString());
-      formData.append('latitude', String(latitude || 0));
-      formData.append('longitude', String(longitude || 0));
-      formData.append('someoneAtHome', String(someoneAtHome));
-
-      // --- Datos del Formulario ---
-      formData.append('numberOfAdults', numberOfAdults || '0');
-      formData.append('numberOfChildren', numberOfChildren || '0');
-      formData.append('underConstruction', String(underConstruction));
-      formData.append('constructionDetails', constructionDetails || '');
-      formData.append('hasDengueFoci', String(hasDengueFoci));
-      formData.append('hasPets', String(hasPets));
-      formData.append('hasPool', String(hasPool));
-
-      // --- Arreglos y Objetos ---
-      // Se envían como JSON stringificados para que el backend los lea
-      formData.append('pets', JSON.stringify(petTypes));
-      formData.append('poolConditions', JSON.stringify(poolCondition));
-      formData.append(
-        'buildingCharacteristics',
-        JSON.stringify(buildingCharacteristics),
-      );
-      formData.append(
-        'neighborCharacteristics',
-        JSON.stringify(neighborCharacteristics),
+      // 🍉 Llamamos al servicio limpio
+      await saveFullInspection(
+        houseId,
+        userRedux,
+        selectedZoneRedux,
+        inspectionData,
       );
 
-      // --- Archivos Media (Fotos/Videos) ---
-      mediaFiles.forEach((file, index) => {
-        // 1. Enviamos el archivo físico
-
-        const fileUri =
-          Platform.OS === 'android' &&
-          !file.uri.startsWith('content://') &&
-          !file.uri.startsWith('file://')
-            ? `file://${file.uri}`
-            : file.uri;
-
-        formData.append('inspection', {
-          uri: fileUri,
-          type: file.type,
-          name: file.name,
-        } as any);
-
-        // 2. Enviamos la metadata relacionada a ese archivo (en la misma posición del index)
-        formData.append(`larvaeDetails[${index}]`, file.larvaeDetails);
-        formData.append(`mediaLat[${index}]`, String(file.latitude));
-        formData.append(`mediaLng[${index}]`, String(file.longitude));
-      });
-
-      // == LLAMADA DIRECTA AL API ==
-
-      try {
-        const token = await AsyncStorage.getItem('token');
-        console.log(
-          `Enviando con FETCH a: ${API_URL}/inspections/createInspection`,
-        );
-
-        const response = await fetch(`${API_URL}inspections/createInspection`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'x-subdomain': userRedux?.subdomain || '',
-            Accept: 'application/json',
-            // 🚨 AQUÍ NO PONEMOS CONTENT-TYPE. FETCH LO HACE 100% AUTOMÁTICO 🚨
-          },
-          body: formData,
-        });
-
-        // Si el backend lanza un error (ej. 400 o 500), lo atrapamos aquí
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Error del backend:', errorData);
-          Alert.alert(
-            'Erro',
-            `O servidor rejeitou a imagem: ${JSON.stringify(errorData)}`,
-          );
-          return; // Salimos de la función
-        }
-
-        // Si todo sale bien:
-        const data = await response.json();
-        console.log('¡Subida exitosa!', data);
-
-        Alert.alert('Sucesso', 'Inspeção guardada corretamente no servidor.');
-        navigation.goBack();
-      } catch (error) {
-        console.error('Error con fetch:', error);
-        Alert.alert(
-          'Erro de Rede',
-          'Não foi possível conectar ao servidor para enviar a imagem.',
-        );
-      } finally {
-        setLoading(false);
-      }
-
-      Alert.alert('Sucesso', 'Inspeção guardada corretamente no servidor.');
+      Alert.alert(
+        'Sucesso',
+        'Inspeção guardada localmente. Será sincronizada automaticamente.',
+      );
       navigation.goBack();
     } catch (error) {
       console.error('Error sendInspection:', error);
-      Alert.alert('Erro', 'Houve um problema ao guardar no servidor.');
+      Alert.alert('Erro', 'Houve um problema ao guardar localmente.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Helper para sincronizar sin bloquear la UI
-  const triggerSyncBackground = async () => {
-    const connected = await hasInternet();
-    if (connected) {
-      await syncPendingInspections(userRedux?.subdomain || '').catch(
-        console.error,
-      );
     }
   };
 

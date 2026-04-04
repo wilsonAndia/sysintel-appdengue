@@ -22,9 +22,8 @@ import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
 import { Modal } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../redux/store';
-import { saveHouseLocal } from '../../../database/services/houseService';
 import { hasInternet } from '../../../helpers/checkConnection';
-
+import { saveHouseInWatermelonDB } from '../../../database/services/houseService';
 const calculateDistance = (
   lat1: number,
   lon1: number,
@@ -257,7 +256,9 @@ const CreateHouse = () => {
       isMounted = false;
     };
   }, [latitude, longitude]);
+
   const handleSubmit = async () => {
+    // 1. Validamos que todo esté lleno
     if (
       !neighborhood ||
       !street ||
@@ -272,6 +273,7 @@ const CreateHouse = () => {
 
     setLoading(true);
 
+    // 2. Preparamos el objeto con los datos
     const newHouse = {
       neighborhood: neighborhood.trim(),
       street: street.trim(),
@@ -284,58 +286,18 @@ const CreateHouse = () => {
       subdomain: userRedux?.subdomain,
       sector_id: zone?.sectorId,
     };
-    console.log('New House:', newHouse);
-    const connected = await hasInternet();
+
     try {
-      if (connected) {
-        console.log('Online: enviando ao servidor');
-        const response = await fetchAxiosToken({
-          url: `inspections/house`,
-          method: 'post',
-          body: newHouse,
-          subdomain: userRedux?.subdomain,
-        });
-        console.log('Response:', response);
+      // 3. LA MAGIA: Guardamos directamente en WatermelonDB (SQLite)
+      // Esto es instantáneo y no depende del internet.
+      await saveHouseInWatermelonDB(newHouse);
 
-        if (
-          response.statusCode === 500 &&
-          response.message === 'Casa duplicada'
-        ) {
-          Alert.alert(
-            'Erro',
-            'Casa duplicada: Já existe uma casa com essa localização. Por favor, verifique os dados e tente novamente.',
-          );
-          return;
-        }
-        if (response.statusCode === 201) {
-          await saveHouseLocal({
-            ...newHouse,
-            backend_id: response.payload.id,
-            sync_status: 'synced',
-          });
-
-          Alert.alert('Sucesso', 'Casa criada com sucesso!');
-
-          Alert.alert('Sucesso', 'Casa criada com sucesso!');
-        } else {
-          throw new Error('Falha ao criar a casa no servidor');
-        }
-      } else {
-        await saveHouseLocal({
-          ...newHouse,
-          backend_id: null,
-          sync_status: 'pending',
-        });
-        Alert.alert(
-          'Offline',
-          'Sem internet, casa salva localmente e será sincronizada depois.',
-        );
-      }
-
+      // 4. Le avisamos al usuario y lo mandamos a la siguiente pantalla
+      Alert.alert('Sucesso', 'Casa registrada com sucesso!');
       navigation.navigate('HouseInspection');
     } catch (error) {
-      console.log('Error:', error);
-      Alert.alert('Erro', 'Não foi possível salvar a casa.');
+      console.log('Error salvando en WatermelonDB:', error);
+      Alert.alert('Erro', 'Não foi possível salvar a casa localmente.');
     } finally {
       setLoading(false);
     }

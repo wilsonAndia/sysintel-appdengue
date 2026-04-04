@@ -1,11 +1,34 @@
-import Realm from 'realm';
-import { realmConfig } from './realm';
+import { Database } from '@nozbe/watermelondb';
+import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
 
-let realmInstance: Realm | null = null;
+import { mySchema } from './schema';
+import House from './models/House';
+import Inspection from './models/Inspections';
+import InspectionPet from './models/InspectionPet';
+import InspectionPoolCondition from './models/InspectionPoolCondition';
+import InspectionBuildingCharacteristic from './models/InspectionBuildingCharacteristic';
+import InspectionMedia from './models/InspectionsMedia';
 
-export async function getRealm(): Promise<Realm> {
-  if (!realmInstance) {
-    realmInstance = await Realm.open(realmConfig);
-  }
-  return realmInstance;
-}
+// 1. Conectamos SQLite a nuestro esquema
+const adapter = new SQLiteAdapter({
+  schema: mySchema,
+  // (Recomendado) Si la app se actualiza y cambias el schema, borra los datos viejos
+  // dbName: 'dengueDB', // Opcional
+  jsi: true, // Usa JSI para que sea ultra rápido en React Native
+  onSetUpError: error => {
+    console.log('Error inicializando base de datos', error);
+  },
+});
+
+// 2. Creamos y exportamos la base de datos
+export const database = new Database({
+  adapter,
+  modelClasses: [
+    House, // Agregamos nuestro modelo aquí
+    Inspection,
+    InspectionPet,
+    InspectionPoolCondition,
+    InspectionBuildingCharacteristic,
+    InspectionMedia,
+  ],
+});

@@ -1,5 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { BackHandler } from 'react-native';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -9,7 +8,9 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
-  Animated,
+  BackHandler,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import tw from '../../../../tailwind';
@@ -22,38 +23,21 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../../redux/store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setSelectedZone, Zone } from '../../../redux/zonesSlice';
-import { setInTheArea } from '../../../redux/inTheAreaSlice';
-import { PermissionsAndroid, Platform } from 'react-native';
-import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
-import {
-  getLocalHouses,
-  getPendingHouses,
-} from '../../../database/services/houseService';
+
+import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { hasInternet } from '../../../helpers/checkConnection';
-import { getRealm } from '../../../database';
 import { setToken, setUser } from '../../../redux/authSlice';
 import { ApiResponse } from '../../../../App';
+import { syncDataWithNestJS } from '../../../database/sync';
+// === IMPORTACIONES DE WATERMELONDB ===
+import withObservables from '@nozbe/with-observables';
+import House from '../../../database/models/House';
+import { observeHousesBySector } from '../../../database/services/houseService';
+import { uploadPendingMedia } from '../../../database/services/syncManager';
 
-interface House {
-  id: string;
-  neighborhood: string;
-  street: string;
-  number: string;
-  complement?: string | null;
-  latitude: number;
-  longitude: number;
-  responsible: string;
-
-  // campos opcionales que SOLO vienen del back
-  subdomain_name?: string;
-  sync_status?: string;
-  updated_at?: string;
-  deleted_at?: string | null;
-
-  // marca de casas guardadas localmente
-  offline?: boolean;
-}
-
+// ============================================================================
+// PERMISOS ORIGINALES
+// ============================================================================
 export const requestLocationPermission = async () => {
   if (Platform.OS === 'android') {
     const granted = await PermissionsAndroid.request(
@@ -92,42 +76,133 @@ export const requestCameraPermission = async () => {
   }
 };
 
+// ============================================================================
+// 1. COMPONENTE REACTIVO INDIVIDUAL (Observa UNA sola casa)
+// ============================================================================
+const HouseItem = ({
+  house,
+  navigation,
+}: {
+  house: House;
+  navigation: any;
+}) => {
+  // Ahora, como observamos la casa directamente, si su estado cambia,
+  // ESTE componente se vuelve a pintar solito al instante.
+  const isOffline = house._raw._status !== 'synced';
+
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('HouseInspections', { id: house.id })}
+    >
+      <View style={tw`p-4 mb-4 rounded-lg shadow-md bg-blue-sysintel-50`}>
+        <View style={tw`flex-row items-center mb-1`}>
+          {isOffline && (
+            <View
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                backgroundColor: 'red',
+                marginRight: 10,
+              }}
+            />
+          )}
+          <Text style={tw`text-lg font-bold text-blue-sysintel-900`}>
+            {house.street}, {house.number} - {house.neighborhood}
+          </Text>
+        </View>
+        <Text style={tw`text-blue-sysintel-800`}>
+          Complemento: {house.complement || ''}
+        </Text>
+        <Text style={tw`text-blue-sysintel-800`}>
+          Responsável: {house.responsible}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// Envolvemos el HouseItem individual en withObservables
+const ReactiveHouseItem = withObservables(
+  ['house'],
+  ({ house }: { house: House }) => ({
+    house: house.observe(), // Observamos sus cambios internos (como el _status)
+  }),
+)(HouseItem);
+
+// ============================================================================
+// 2. COMPONENTE DE LISTA REACTIVA (Observa EL TOTAL de casas)
+// ============================================================================
+const HouseList = ({
+  houses,
+  navigation,
+}: {
+  houses: House[];
+  navigation: any;
+}) => {
+  if (houses.length === 0) {
+    return (
+      <View style={tw`items-center justify-start px-4 mt-8`}>
+        <Text style={tw`text-lg text-center text-blue-sysintel-800`}>
+          Nenhuma casa encontrada neste setor.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      style={tw`h-full p-2 rounded-lg`}
+      data={houses}
+      keyExtractor={house => house.id}
+      contentContainerStyle={tw`px-4 py-4 flex-grow`}
+      // ¡Aquí usamos nuestro nuevo componente individual reactivo!
+      renderItem={({ item }) => (
+        <ReactiveHouseItem house={item} navigation={navigation} />
+      )}
+      showsVerticalScrollIndicator={false}
+    />
+  );
+};
+
+const ReactiveHouseList = withObservables(
+  ['sectorId'],
+  ({ sectorId }: { sectorId: string }) => ({
+    houses: observeHousesBySector(sectorId),
+  }),
+)(HouseList);
+
+// ============================================================================
+// PANTALLA PRINCIPAL
+// ============================================================================
 const HouseInspection = () => {
   const navigation = useNavigation<NavigationProp>();
-  const [houses, setHouses] = useState<House[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [zones, setZones] = useState<Zone[]>([]);
+  const dispatch = useDispatch();
+
   const zone = useSelector((state: RootState) => state.zones.selectedZone);
   const inTheArea = useSelector(
     (state: RootState) => state.inTheArea.inTheArea,
   );
   const userRedux = useSelector((state: RootState) => state.auth.user);
-  const [refreshing, setRefreshing] = useState(false);
-  const dispatch = useDispatch();
+
+  const [loading, setLoading] = useState(true);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [isZoneModalVisible, setZoneModalVisible] = useState(false);
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
-  const [isZoneModalVisible, setZoneModalVisible] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [connected, setConnected] = useState(true);
-
-  // Animated value for blinking pending badge
-  const blinkAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const loadToken = async () => {
       try {
         const token = await AsyncStorage.getItem('token');
-
         if (token) {
           dispatch(setToken(token));
-
           const response: ApiResponse = await fetchAxiosToken({
             url: `users/getOne/token`,
             method: 'post',
           });
-          /*  console.log(response); */
           dispatch(
             setUser({
               id: response.payload.id,
@@ -145,53 +220,8 @@ const HouseInspection = () => {
         console.error('Error al cargar el token:', error);
       }
     };
-
     loadToken();
   }, [dispatch]);
-
-  useEffect(() => {
-    let animation: Animated.CompositeAnimation | null = null;
-
-    if (pendingCount > 0) {
-      // loop a fade out/in effect
-      animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(blinkAnim, {
-            toValue: 0.25,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(blinkAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-      animation.start();
-    } else {
-      // reset to fully visible when there is no pending badge
-      blinkAnim.setValue(1);
-    }
-
-    return () => {
-      if (animation) animation.stop();
-    };
-  }, [pendingCount, blinkAnim]);
-
-  useEffect(() => {
-    const loadPending = async () => {
-      const hasNet = await hasInternet();
-      setConnected(Boolean(hasNet));
-      const pending = await getPendingHouses(zone?.sectorId ?? '');
-      setPendingCount(pending.length);
-      console.log('Selected Zone:', zone);
-      setLoading(true);
-      await getCurrentLocation();
-    };
-
-    loadPending();
-  }, [zone]);
 
   const checkAndGetPermissions = async () => {
     const hasLocation = await requestLocationPermission();
@@ -204,12 +234,10 @@ const HouseInspection = () => {
       );
       return;
     }
-
     if (!hasCamera) {
       Alert.alert('Permissão Negada', 'Não podemos continuar sem a câmera.');
       return;
     }
-
     await getCurrentLocation();
   };
 
@@ -220,131 +248,28 @@ const HouseInspection = () => {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         });
-        await fetchHouses(position.coords.latitude, position.coords.longitude);
-
-        setLoading(false);
       },
       error => {
         Alert.alert('Erro', 'Não foi possível obter a localização atual.');
-        console.log('Error:', error);
       },
       { enableHighAccuracy: false, timeout: 20000, maximumAge: 1000 },
     );
   };
 
-  // const fetchHouses = async (latitude: number, longitude: number) => {
-  //   console.log('userReduc', userRedux);
-  //   try {
-  //     const response = await fetchAxiosToken({
-  //       url: `inspections/houses/coordinates`,
-  //       method: 'post',
-  //       body: {
-  //         latitude: Number(latitude),
-  //         longitude: Number(longitude),
-
-  //         sectorId: zone?.sectorId || '',
-  //       },
-  //       subdomain: userRedux?.subdomain,
-  //     });
-
-  //     if (response.statusCode === 200) {
-  //       setHouses(response.payload.houses);
-  //       if (zone) {
-  //         console.log('inTheArea:', response.payload.inTheArea);
-  //         dispatch(
-  //           setInTheArea({
-  //             inTheArea: response.payload.inTheArea || false,
-  //           }),
-  //         );
-  //       }
-  //     } else {
-  //       console.log('Error al obtener casas:', response.message);
-  //     }
-  //   } catch (error) {
-  //     console.log('Error:', error);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
-  const fetchHouses = async (latitude: number, longitude: number) => {
-    console.log('userReduc', userRedux);
-
-    const connected = await hasInternet();
-
-    if (!connected) {
-      console.log('📡 Sin internet → cargar casas del cache...');
-      console.log('zone', zone?.sectorId);
-      const localHouses = await getLocalHouses(zone?.sectorId ?? '');
-      const normalizedHouses: House[] = (localHouses as any[]).map(h => ({
-        id: String(h.id),
-        neighborhood: String(h.neighborhood ?? ''),
-        street: String(h.street ?? ''),
-        number: String(h.number ?? ''),
-        complement: h.complement ?? null,
-        latitude: Number(h.latitude) || 0,
-        longitude: Number(h.longitude) || 0,
-        responsible: String(h.responsible ?? ''),
-        offline: true,
-      }));
-      setHouses(normalizedHouses);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await fetchAxiosToken({
-        url: `inspections/houses/coordinates`,
-        method: 'post',
-        body: {
-          latitude: Number(latitude),
-          longitude: Number(longitude),
-          sectorId: zone?.sectorId || '',
-        },
-        subdomain: userRedux?.subdomain,
-      });
-
-      if (response.statusCode === 200) {
-        setHouses(response.payload.houses);
-
-        if (zone) {
-          dispatch(
-            setInTheArea({
-              inTheArea: response.payload.inTheArea || false,
-            }),
-          );
-        }
-      } else {
-        console.log('Error al obtener casas:', response.message);
-      }
-    } catch (error) {
-      console.log('Error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchZones = async () => {
     const connected = await hasInternet();
-    if (!connected) {
-      console.log('Sem conexão, não é possível buscar zonas');
-      return;
-    }
-
+    if (!connected) return;
     try {
       const response = await fetchAxiosToken({
         url: `region/get/regions-by-user`,
         method: 'get',
       });
-
       setZones(response.payload);
     } catch (error) {
-      console.log('Erro:', error);
-      Alert.alert('Erro', 'Houve um problema ao obter zonas');
+      console.log('Erro ao buscar zonas:', error);
     }
   };
 
-  // Format YYYY-MM-DD or ISO string to DD/MM/YYYY
   const formatDate = (s?: string | null) => {
     if (!s) return '';
     try {
@@ -360,27 +285,17 @@ const HouseInspection = () => {
   const handleZoneChange = async (zoneH: Zone) => {
     dispatch(
       setSelectedZone({
-        regionName: zoneH.regionName,
-        groupName: zoneH.groupName,
-        visitId: zoneH.visitId,
-        sectorGroup: zoneH.sectorGroup,
-        sectorId: zoneH.sectorId,
+        ...zoneH,
         inTheArea: (zone && zone.inTheArea) || false,
-        endDate: zoneH.endDate,
-        startDate: zoneH.startDate,
-        endTime: zoneH.endTime,
-        startTime: zoneH.startTime,
-        groupId: zoneH.groupId,
       }),
     );
-    fetchHouses(location?.latitude || 0, location?.longitude || 0);
-
     try {
-      await AsyncStorage.setItem('selectedZone', JSON.stringify(zone));
+      await AsyncStorage.setItem('selectedZone', JSON.stringify(zoneH));
     } catch (error) {
       console.log('Error al guardar la zona:', error);
     }
   };
+
   useEffect(() => {
     fetchZones();
     checkAndGetPermissions();
@@ -388,23 +303,12 @@ const HouseInspection = () => {
     const loadSelectedZone = async () => {
       try {
         const storedZone = await AsyncStorage.getItem('selectedZone');
-
         if (storedZone) {
           const parsedZone: Zone = JSON.parse(storedZone);
-
           dispatch(
             setSelectedZone({
-              regionName: parsedZone.regionName,
-              groupName: parsedZone.groupName,
-              visitId: parsedZone.visitId,
-              sectorGroup: parsedZone.sectorGroup,
-              sectorId: parsedZone.sectorId,
+              ...parsedZone,
               inTheArea: (zone && zone.inTheArea) || false,
-              endDate: parsedZone.endDate,
-              startDate: parsedZone.startDate,
-              endTime: parsedZone.endTime,
-              startTime: parsedZone.startTime,
-              groupId: parsedZone.groupId,
             }),
           );
         } else {
@@ -412,6 +316,8 @@ const HouseInspection = () => {
         }
       } catch (error) {
         console.log('Error al cargar la zona almacenada:', error);
+      } finally {
+        setLoading(false); // Quitamos el loading una vez que sabemos la zona
       }
     };
 
@@ -429,61 +335,42 @@ const HouseInspection = () => {
       'hardwareBackPress',
       backAction,
     );
-
     return () => backHandler.remove();
   }, [isZoneModalVisible]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await getCurrentLocation();
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  async function syncPendingHouses(sectorId: string) {
-    const pending = await getPendingHouses(sectorId);
-
-    if (pending.length === 0) return [];
-    console.log('userRedux', userRedux);
-
-    const response = await fetchAxiosToken({
-      url: 'inspections/sync/houses',
-      method: 'post',
-      body: { houses: pending },
-      subdomain: userRedux?.subdomain,
-    });
-    console.log('response syncPendingHouses', response);
-    if (response.statusCode !== 201) throw new Error('Error al sincronizar');
-
-    const realm = await getRealm();
-
-    realm.write(() => {
-      response.payload.synced.forEach((item: any) => {
-        const house = realm.objectForPrimaryKey(
-          'House',
-          new Realm.BSON.ObjectId(item.local_id),
-        );
-        if (house) {
-          house.backend_id = item.backend_id;
-          house.sync_status = 'synced';
-        }
-      });
-    });
-
-    return response.payload.synced;
-  }
-
   const syncNow = async () => {
+    if (!zone?.sectorId || !location?.latitude || !location?.longitude) {
+      Alert.alert(
+        'Atenção',
+        'Precisamos da sua localização e da zona para sincronizar.',
+      );
+      return;
+    }
+
     try {
-      Alert.alert('Sincronizando...', 'Espere...');
-      const synced = await syncPendingHouses(zone?.sectorId!);
-      Alert.alert('Feito!', `Foram sincronizadas ${synced.length} casas.`);
-      setPendingCount(0);
-    } catch (err) {
-      console.log(err);
-      Alert.alert('Erro', 'Não foi possível sincronizar agora.');
+      Alert.alert(
+        'Sincronizando...',
+        'Subindo fotos e dados. Aguarde um momento.',
+      );
+
+      // 1. PASO NUEVO: Subimos las fotos a AWS primero y cambiamos los nombres
+      await uploadPendingMedia();
+
+      // 2. PASO VIEJO: Sincronizamos el texto con NestJS (que ahora llevará los nombres correctos de las fotos)
+      await syncDataWithNestJS(
+        userRedux?.subdomain || '',
+        zone.sectorId,
+        location.latitude,
+        location.longitude,
+      );
+
+      Alert.alert('Sucesso!', 'Os dados foram sincronizados com o servidor.');
+    } catch (error) {
+      console.error('Erro de sincronização:', error);
+      Alert.alert(
+        'Erro',
+        'Houve um problema ao sincronizar os dados. Tente novamente mais tarde.',
+      );
     }
   };
 
@@ -502,56 +389,19 @@ const HouseInspection = () => {
           <View style={tw`flex-row items-center`}>
             {/* === Botón sincronizar === */}
             <TouchableOpacity
-              disabled={!connected || pendingCount === 0}
               onPress={syncNow}
-              style={[
-                tw`relative px-4 py-2 rounded-lg mr-2`,
-                !connected || pendingCount === 0
-                  ? tw`bg-gray-400`
-                  : tw`bg-green-700`,
-              ]}
+              style={tw`px-4 py-2 rounded-lg mr-2 bg-green-700`}
             >
               <Text style={tw`text-white font-bold`}>Sync</Text>
-
-              {pendingCount > 0 && (
-                <Animated.View
-                  style={{
-                    position: 'absolute',
-                    top: -4,
-                    right: -4,
-                    width: 18,
-                    height: 18,
-                    borderRadius: 9,
-                    backgroundColor: 'red',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    opacity: blinkAnim,
-                  }}
-                >
-                  <Text
-                    style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}
-                  >
-                    {pendingCount}
-                  </Text>
-                </Animated.View>
-              )}
             </TouchableOpacity>
-            {/* === Fin botón sincronizar === */}
+
+            {/* === Botón Criar Casa === */}
             <TouchableOpacity
               style={tw.style(
                 'px-4 py-2 rounded-lg',
                 inTheArea ? 'bg-blue-sysintel-800' : 'bg-blue-sysintel-200',
               )}
-              onPress={() => {
-                // if (!inTheArea) {
-                //   Alert.alert(
-                //     'Atenção',
-                //     'Você deve estar dentro da zona para criar uma casa.',
-                //   );
-                //   return;
-                // }
-                navigation.navigate('CreateHouse');
-              }}
+              onPress={() => navigation.navigate('CreateHouse')}
             >
               <Text style={tw`font-bold text-white`}>+ Criar Casa</Text>
             </TouchableOpacity>
@@ -559,87 +409,36 @@ const HouseInspection = () => {
         </View>
       </View>
 
+      {/* === LISTA REACTIVA === */}
       {loading ? (
         <View style={tw`items-center justify-center h-full`}>
           <ActivityIndicator size="large" color="#144c78" />
-          <Text style={tw`mt-2 text-blue-sysintel-100`}>
-            Carregando casas...
+          <Text style={tw`mt-2 text-blue-sysintel-900`}>
+            Carregando banco local...
           </Text>
         </View>
-      ) : houses.length === 0 ? (
-        <View style={tw`items-center justify-start px-4 mt-8`}>
-          <Text style={tw`text-lg text-center text-blue-sysintel-800`}>
-            Nenhuma casa encontrada na sua localização.
-          </Text>
-        </View>
+      ) : zone?.sectorId ? (
+        <ReactiveHouseList sectorId={zone.sectorId} navigation={navigation} />
       ) : (
-        <FlatList
-          style={tw`h-full p-2 rounded-lg `}
-          data={houses}
-          keyExtractor={house => house.id}
-          contentContainerStyle={tw`px-4 py-4 flex-grow`}
-          renderItem={({ item: house }) => (
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate('HouseInspections', { id: house.id })
-              }
-            >
-              <View
-                style={tw`p-4 mb-4 rounded-lg shadow-md bg-blue-sysintel-50`}
-              >
-                {/* Punto rojo si es offline */}
-                {house.offline && (
-                  <View
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 6,
-                      backgroundColor: 'red',
-                      marginRight: 10,
-                      marginTop: 6,
-                    }}
-                  />
-                )}
-                <Text style={tw`text-lg font-bold text-blue-sysintel-900`}>
-                  {house.street}, {house.number} - {house.neighborhood}
-                </Text>
-                <Text style={tw`text-blue-sysintel-800`}>
-                  Complemento: {house.complement || ''}
-                </Text>
-                <Text style={tw`text-blue-sysintel-800`}>
-                  Responsável: {house.responsible}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          // Si no hay datos, muestra el vacío (y sigue habilitado el pull)
-          ListEmptyComponent={
-            <View style={tw`items-center justify-start mt-8`}>
-              <Text style={tw`text-lg text-center text-blue-sysintel-800`}>
-                Nenhuma casa encontrada na sua localização.
-              </Text>
-            </View>
-          }
-          // (Android) baja un poco el spinner para que no tape el header
-          progressViewOffset={20}
-          showsVerticalScrollIndicator={false}
-        />
+        <View style={tw`items-center justify-center mt-8`}>
+          <Text style={tw`text-lg text-center text-blue-sysintel-800`}>
+            Selecione uma zona primeiro.
+          </Text>
+        </View>
       )}
+
+      {/* === MODAL DE ZONAS === */}
       <Modal
         visible={isZoneModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          navigation.goBack();
-        }}
+        onRequestClose={() => navigation.goBack()}
       >
         <View
           style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}
         >
           <View style={tw`bg-white w-4/5 rounded-lg p-4 max-h-[70%]`}>
-            <Text style={tw`mb-4 text-lg font-bold`}>Seleccionar Zona</Text>
+            <Text style={tw`mb-4 text-lg font-bold`}>Selecionar Zona</Text>
             <FlatList
               data={zones}
               keyExtractor={item => item.visitId}
