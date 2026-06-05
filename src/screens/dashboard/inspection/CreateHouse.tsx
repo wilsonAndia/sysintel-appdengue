@@ -1,4 +1,4 @@
-import React, { use, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import tw from '../../../../tailwind';
 import Navbar from '../../../components/NavBar';
-import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
 import { useNavigation } from '@react-navigation/native';
 import { NavigationProp } from '../../../helpers/types/navigationProp';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -44,6 +43,16 @@ const calculateDistance = (
   return R * c;
 };
 
+type LocationAddress = {
+  street?: string;
+  neighborhood?: string;
+};
+
+const getFirstString = (...values: unknown[]) =>
+  values.find(value => typeof value === 'string' && value.trim().length > 0) as
+    | string
+    | undefined;
+
 const CreateHouse = () => {
   const navigation = useNavigation<NavigationProp>();
   const [neighborhood, setNeighborhood] = useState('');
@@ -72,6 +81,17 @@ const CreateHouse = () => {
     useState(false);
   const [manualNeighborhoodInput, setManualNeighborhoodInput] = useState(false);
 
+  const streetRef = useRef(street);
+  const neighborhoodRef = useRef(neighborhood);
+
+  useEffect(() => {
+    streetRef.current = street;
+  }, [street]);
+
+  useEffect(() => {
+    neighborhoodRef.current = neighborhood;
+  }, [neighborhood]);
+
   console.log({
     latitude,
     longitude,
@@ -95,13 +115,14 @@ const CreateHouse = () => {
     getCurrentLocation();
   }, []);
 
-  const fetchWithRetry = async (
+  const fetchWithRetry = useCallback(async (
     url: string,
     retries = 2,
+    options?: RequestInit,
   ): Promise<Response> => {
     for (let i = 0; i < retries; i++) {
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, options);
 
         if (response.ok) return response;
 
@@ -122,7 +143,44 @@ const CreateHouse = () => {
       }
     }
     throw new Error('Falló la petición después de varios intentos');
-  };
+  }, []);
+
+  const fetchReverseAddress = useCallback(async (
+    lat: number,
+    lon: number,
+  ): Promise<LocationAddress> => {
+    const params = `format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
+    const url = `https://nominatim.openstreetmap.org/reverse?${params}`;
+    const response = await fetchWithRetry(url, 3, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'sysintel-appdengue',
+      },
+    });
+
+    const data = await response.json();
+    const address = data?.address || {};
+
+    return {
+      street: getFirstString(
+        address.road,
+        address.pedestrian,
+        address.footway,
+        address.cycleway,
+        address.path,
+        address.residential,
+        data?.name,
+      ),
+      neighborhood: getFirstString(
+        address.neighbourhood,
+        address.suburb,
+        address.city_district,
+        address.district,
+        address.quarter,
+        address.residential,
+      ),
+    };
+  }, [fetchWithRetry]);
 
   useEffect(() => {
     // Usamos un ref para saber si el componente sigue montado
@@ -145,6 +203,35 @@ const CreateHouse = () => {
 
       setLoadingStreets(true);
       setLoadingNeighborhoods(true);
+
+      try {
+        const address = await fetchReverseAddress(latitude, longitude);
+        if (!isMounted) return;
+
+        if (address.street && !streetRef.current) {
+          setStreet(address.street);
+          streetRef.current = address.street;
+          setManualStreetInput(false);
+          setNearbyStreets(current =>
+            current.includes(address.street!)
+              ? current
+              : [address.street!, ...current],
+          );
+        }
+
+        if (address.neighborhood && !neighborhoodRef.current) {
+          setNeighborhood(address.neighborhood);
+          neighborhoodRef.current = address.neighborhood;
+          setManualNeighborhoodInput(false);
+          setNearbyNeighborhoods(current =>
+            current.includes(address.neighborhood!)
+              ? current
+              : [address.neighborhood!, ...current],
+          );
+        }
+      } catch (error) {
+        console.log('Error fetching reverse address:', error);
+      }
 
       try {
         // --- 1. OPTIMIZACIÓN DE QUERIES ---
@@ -201,12 +288,17 @@ const CreateHouse = () => {
         const uniqueStreets = Array.from(
           new Set<string>(streetsWithDistance.map((s: any) => s.name)),
         );
-        setNearbyStreets(uniqueStreets);
+        const streetSuggestions =
+          streetRef.current && !uniqueStreets.includes(streetRef.current)
+            ? [streetRef.current, ...uniqueStreets]
+            : uniqueStreets;
+        setNearbyStreets(streetSuggestions);
 
-        if (uniqueStreets.length > 0 && !street) {
+        if (uniqueStreets.length > 0 && !streetRef.current) {
           setStreet(uniqueStreets[0]);
+          streetRef.current = uniqueStreets[0];
           setManualStreetInput(false);
-        } else if (uniqueStreets.length === 0) {
+        } else if (uniqueStreets.length === 0 && !streetRef.current) {
           setManualStreetInput(true);
         }
 
@@ -228,19 +320,28 @@ const CreateHouse = () => {
         const uniqueNeighborhoods = Array.from(
           new Set<string>(neighborhoodsWithDistance.map((n: any) => n.name)),
         );
-        setNearbyNeighborhoods(uniqueNeighborhoods);
+        const neighborhoodSuggestions =
+          neighborhoodRef.current &&
+          !uniqueNeighborhoods.includes(neighborhoodRef.current)
+            ? [neighborhoodRef.current, ...uniqueNeighborhoods]
+            : uniqueNeighborhoods;
+        setNearbyNeighborhoods(neighborhoodSuggestions);
 
-        if (uniqueNeighborhoods.length > 0 && !neighborhood) {
+        if (uniqueNeighborhoods.length > 0 && !neighborhoodRef.current) {
           setNeighborhood(uniqueNeighborhoods[0]);
+          neighborhoodRef.current = uniqueNeighborhoods[0];
           setManualNeighborhoodInput(false);
-        } else if (uniqueNeighborhoods.length === 0) {
+        } else if (
+          uniqueNeighborhoods.length === 0 &&
+          !neighborhoodRef.current
+        ) {
           setManualNeighborhoodInput(true);
         }
       } catch (error) {
         console.log('Error fetching location data:', error);
         if (isMounted) {
-          setManualStreetInput(true);
-          setManualNeighborhoodInput(true);
+          setManualStreetInput(!streetRef.current);
+          setManualNeighborhoodInput(!neighborhoodRef.current);
         }
       } finally {
         if (isMounted) {
@@ -255,7 +356,7 @@ const CreateHouse = () => {
     return () => {
       isMounted = false;
     };
-  }, [latitude, longitude]);
+  }, [latitude, longitude, fetchReverseAddress, fetchWithRetry]);
 
   const handleSubmit = async () => {
     // 1. Validamos que todo esté lleno
