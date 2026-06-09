@@ -1,6 +1,7 @@
 import { synchronize } from '@nozbe/watermelondb/sync';
 import { database } from './index';
 import { fetchAxiosToken } from '../helpers/fetchAxiosToken';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export async function syncDataWithNestJS(
   subdomainName: string,
@@ -15,14 +16,18 @@ export async function syncDataWithNestJS(
     // 1. PULL (Descargar del servidor)
     // ==========================================
     pullChanges: async ({ lastPulledAt }) => {
+      // Usar AsyncStorage para llevar un lastPulledAt POR SECTOR
+      const storedTimestamp = await AsyncStorage.getItem(`sync_${sectorId}`);
+      const sectorLastPulledAt = storedTimestamp ? Number(storedTimestamp) : 0;
+
       console.log(
-        `⬇️ Iniciando PULL... (Último sync: ${lastPulledAt || 'NUNCA'})`,
+        `⬇️ Iniciando PULL... (Último sync de este sector: ${sectorLastPulledAt || 'NUNCA'})`,
       );
 
       const response = await fetchAxiosToken({
         url: 'sync/pull',
         method: 'post',
-        body: { lastPulledAt, subdomainName, sectorId, lat, lng },
+        body: { lastPulledAt: sectorLastPulledAt, subdomainName, sectorId, lat, lng },
         subdomain: subdomainName,
       });
 
@@ -53,11 +58,11 @@ export async function syncDataWithNestJS(
           : new Date().getTime(),
       });
 
-      const isFirstSync = !lastPulledAt;
+      const isFirstSync = !sectorLastPulledAt;
       const rawCreated = data.changes.houses.created || [];
       const rawUpdated = data.changes.houses.updated || [];
       const rawDeleted = data.changes.houses.deleted || [];
-
+      []
       let safeCreated = [];
       let safeUpdated = [];
       let safeDeleted = [];
@@ -77,15 +82,19 @@ export async function syncDataWithNestJS(
         `✅ PULL Listo. C: ${safeCreated.length}, U: ${safeUpdated.length}, D: ${safeDeleted.length}`,
       );
 
+      const newTimestamp = Number(data.timestamp) || new Date().getTime();
+      await AsyncStorage.setItem(`sync_${sectorId}`, newTimestamp.toString());
+
       return {
         changes: {
+          ...data.changes, // Pasar también las inspecciones y otras tablas
           houses: {
             created: safeCreated,
             updated: safeUpdated,
             deleted: safeDeleted,
           },
         },
-        timestamp: Number(data.timestamp) || new Date().getTime(),
+        timestamp: newTimestamp,
       };
     },
 

@@ -54,7 +54,7 @@ const Login: React.FC = () => {
       [field]: value, // Actualiza el campo correspondiente
     }));
   };
-  console.log('API_URLlllll', API_URL);
+
   const handleRegister = async () => {
     Keyboard.dismiss();
     if (!input.correo || !input.password) {
@@ -65,7 +65,7 @@ const Login: React.FC = () => {
       });
       return;
     }
-
+    console.log('API_URLlllll', API_URL);
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(input.correo.trim())) {
       Toast.show({
@@ -234,9 +234,8 @@ const Login: React.FC = () => {
             </View>
 
             <TouchableOpacity
-              style={tw`mt-10 w-4/5 bg-blue-sysintel-800 rounded-md p-2 ${
-                loading ? 'py-3' : ''
-              } mx-auto flex`}
+              style={tw`mt-10 w-4/5 bg-blue-sysintel-800 rounded-md p-2 ${loading ? 'py-3' : ''
+                } mx-auto flex`}
               disabled={loading}
               onPress={handleRegister}
             >
