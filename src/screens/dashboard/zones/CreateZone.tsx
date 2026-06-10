@@ -1,4 +1,4 @@
-import React, {useRef, useState} from 'react';
+import React, { useRef, useState } from 'react';
 import 'react-native-get-random-values';
 import {
   SafeAreaView,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 /* import Maps from './Maps'; */
 import Navbar from '../../../components/NavBar';
-import {GooglePlacesAutocomplete} from 'react-native-google-places-autocomplete';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import tw from '../../../../tailwind';
 import MapView, {
   LatLng,
@@ -21,10 +21,10 @@ import MapView, {
   Polygon,
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
-import Svg, {Path} from 'react-native-svg';
-import {fetchAxiosToken} from '../../../helpers/fetchAxiosToken';
-import {useNavigation} from '@react-navigation/native';
-import {NavigationProp} from '../../../helpers/types/navigationProp';
+import Svg, { Path } from 'react-native-svg';
+import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
+import { useNavigation } from '@react-navigation/native';
+import { NavigationProp } from '../../../helpers/types/navigationProp';
 
 const GOOGLE_API_KEY = 'AIzaSyD_F0e9hcjN_CWTYWn5wu1z_mSn7clnQY8';
 
@@ -211,26 +211,26 @@ const CreateZone = () => {
     }
   };
   return (
-    <SafeAreaView style={{flex: 1}}>
+    <SafeAreaView style={{ flex: 1 }}>
       <Navbar />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{flexGrow: 1}}
+        style={{ flexGrow: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
-        <View style={{flex: 1, justifyContent: 'flex-start'}}>
+        <View style={{ flex: 1, justifyContent: 'flex-start' }}>
           <Text style={tw`text-center text-2xl font-bold mb-4`}>
             Selecciona una ubicación
           </Text>
 
           <TextInput
             placeholder="Nombre de la zona"
-            onChangeText={text => setZone({...zone, name: text})}
+            onChangeText={text => setZone({ ...zone, name: text })}
             style={tw`border bg-white border-gray-300 p-2 rounded-lg mb-4`}
           />
 
           {/* Buscador de Google Places */}
 
-          <View style={{position: 'relative', zIndex: 1000}}>
+          <View style={{ position: 'relative', zIndex: 1000 }}>
             <GooglePlacesAutocomplete
               placeholder="Buscar ubicación"
               fetchDetails={true}
@@ -241,8 +241,8 @@ const CreateZone = () => {
               onPress={(data, details = null) => {
                 if (!details) return;
 
-                const {lat, lng} = details.geometry.location;
-                const center = {latitude: lat, longitude: lng};
+                const { lat, lng } = details.geometry.location;
+                const center = { latitude: lat, longitude: lng };
                 const newPolygon = generateSquarePolygon(center);
 
                 setPolygonCoords(newPolygon);
@@ -280,9 +280,8 @@ const CreateZone = () => {
             <View
               style={tw`absolute top-3 right-3 bg-white p-1 rounded-lg shadow-lg z-10`}>
               <View
-                style={tw`w-16 h-8  ${
-                  enabledDelete ? 'bg-green-200' : 'bg-gray-300'
-                } rounded-md p-1 flex-row items-center`}>
+                style={tw`w-16 h-8  ${enabledDelete ? 'bg-green-200' : 'bg-gray-300'
+                  } rounded-md p-1 flex-row items-center`}>
                 <Animated.View
                   style={[
                     tw`w-6 h-6 bg-white rounded-md shadow-lg`,
@@ -298,9 +297,8 @@ const CreateZone = () => {
                     },
                   ]}>
                   <Svg
-                    style={tw`h-5 w-5 ${
-                      enabledDelete ? 'text-green-500' : 'text-gray-500'
-                    }`}
+                    style={tw`h-5 w-5 ${enabledDelete ? 'text-green-500' : 'text-gray-500'
+                      }`}
                     width="24"
                     height="24"
                     viewBox="0 0 24 24"
@@ -326,7 +324,7 @@ const CreateZone = () => {
             <MapView
               ref={mapRef}
               provider={PROVIDER_GOOGLE}
-              style={{flex: 1}}
+              style={{ flex: 1 }}
               initialRegion={{
                 latitude: -16.528226,
                 longitude: -68.153575,
@@ -349,15 +347,15 @@ const CreateZone = () => {
                   draggable={!enabledDelete}
                   onDragStart={event => handleDragStart(index, event)}
                   onDragEnd={event => handleDragEnd(index, event)}
-                  anchor={{x: 0.5, y: 0.5}} // Centra el marcador en la coordenada
-                  calloutAnchor={{x: 0.5, y: 0.5}}
+                  anchor={{ x: 0.5, y: 0.5 }} // Centra el marcador en la coordenada
+                  calloutAnchor={{ x: 0.5, y: 0.5 }}
                   onPress={() => enabledDelete && handleDeleteMarker(index)} // Evita desajustes del tooltip
                 >
                   <View
                     style={[
                       tw`items-center justify-center`,
                       {
-                        transform: [{translateY: 10}, {translateX: 15}],
+                        transform: [{ translateY: 10 }, { translateX: 15 }],
                       },
                     ]}>
                     {enabledDelete ? (

@@ -13,6 +13,9 @@ export interface Zone {
   groupId: string; // ID del grupo para saber como quién reporta
   startTime: string; // Hora de inicio (HH:MM:SS)
   endTime: string; // Hora de fin (HH:MM:SS)
+  latitude: string; // 👈 NUEVO: Latitud central de la zona
+  longitude: string; // 👈 NUEVO: Longitud central de la zona
+  coordinates: { latitude: string; longitude: string }[];
 }
 
 interface ZoneState {

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,12 @@ import { clearToken } from '../redux/authSlice';
 import { RootState } from '../redux/store';
 import { clearSelectedZone, setSelectedZone, Zone } from '../redux/zonesSlice';
 import { fetchAxiosToken } from '../helpers/fetchAxiosToken';
-
+import MapView, {
+  LatLng,
+  Marker,
+  Polygon,
+  PROVIDER_GOOGLE,
+} from 'react-native-maps';
 import { ScrollView } from 'react-native-gesture-handler';
 
 import Geolocation from '@react-native-community/geolocation';
@@ -100,6 +105,8 @@ const Navbar: React.FC = () => {
   const selectedZoneRedux = useSelector(
     (state: RootState) => state.zones.selectedZone,
   );
+
+  const GOOGLE_API_KEY = 'AIzaSyD_F0e9hcjN_CWTYWn5wu1z_mSn7clnQY8';
   const [showOptions, setShowOptions] = useState(false);
   const [zones, setZones] = useState<Zone[]>([]);
   const [selectedZone, setSelectedZoneState] = useState<Zone | null>(null);
@@ -107,46 +114,7 @@ const Navbar: React.FC = () => {
   const [gpsEnabled, setGpsEnabled] = useState(true);
   const [showGpsModal, setShowGpsModal] = useState(false);
   const [loddingGPS, setLoddingGPS] = useState(false);
-
-  // const checkIfLocationIsEnabled = async (): Promise<boolean> => {
-  //   console.log('Entrando a checkIfLocationIsEnabled...');
-
-  //   const result = await requestLocationPermission();
-
-  //   if (result === 'blocked') {
-  //     console.log('PERMISO BLOQUEADO — ir a ajustes');
-
-  //     setShowGpsModal(true); // Abres el modal para enviar al usuario a Configuración
-  //     return false;
-  //   }
-
-  //   if (result === 'denied') {
-  //     console.log('PERMISO NEGADO — intentar otra vez');
-  //     return false;
-  //   }
-
-  //   // granted
-  //   try {
-  //     const position = await new Promise<GeoPosition | null>(resolve => {
-  //       Geolocation.getCurrentPosition(
-  //         pos => {
-  //           console.log('Ubicación obtenida:', pos.coords);
-  //           resolve(pos as GeoPosition);
-  //         },
-  //         error => {
-  //           console.log('Error obteniendo ubicación:', error);
-  //           resolve(null);
-  //         },
-  //         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-  //       );
-  //     });
-
-  //     return position !== null;
-  //   } catch (err) {
-  //     console.log('Unexpected error:', err);
-  //     return false;
-  //   }
-  // };
+  const mapRef = useRef<MapView>(null);
 
   const checkIfLocationIsEnabled = async (): Promise<boolean> => {
     console.log('Entrando a checkIfLocationIsEnabled...');
@@ -194,6 +162,23 @@ const Navbar: React.FC = () => {
       return false;
     }
   };
+
+
+  useEffect(() => {
+    if (selectedZone && mapRef.current) {
+      const lat = parseFloat(selectedZone.latitude);
+      const lng = parseFloat(selectedZone.longitude);
+
+      if (!isNaN(lat) && !isNaN(lng)) {
+        mapRef.current.animateToRegion({
+          latitude: lat,
+          longitude: lng,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.015,
+        }, 1000); // 1000ms = 1 segundo de animación
+      }
+    }
+  }, [selectedZone]);
 
   const interval = async () => {
     try {
@@ -243,6 +228,14 @@ const Navbar: React.FC = () => {
     }
   };
 
+  const getFormattedCoordinates = (coords: { latitude: string; longitude: string }[]) => {
+    if (!coords) return [];
+    return coords.map(c => ({
+      latitude: parseFloat(c.latitude),
+      longitude: parseFloat(c.longitude),
+    }));
+  };
+
   const fetchZones = async () => {
     const connected = await hasInternet();
     if (!connected) {
@@ -255,7 +248,7 @@ const Navbar: React.FC = () => {
         url: `region/get/regions-by-user`,
         method: 'get',
       });
-      console.log('Zonas:', response.payload);
+
       setZones(response.payload);
     } catch (error) {
       console.log('Erro Zonass:', error);
@@ -338,6 +331,40 @@ const Navbar: React.FC = () => {
     }
   };
 
+
+  const getSafeRegion = () => {
+    // 1. Extraemos los strings de lat/lng
+    const latStr = selectedZone?.latitude || (zones.length > 0 ? zones[0].latitude : null);
+    const lngStr = selectedZone?.longitude || (zones.length > 0 ? zones[0].longitude : null);
+
+    // 2. Intentamos convertirlos
+    const lat = parseFloat(latStr as string);
+    const lng = parseFloat(lngStr as string);
+
+    // 3. Verificamos si falló la conversión (isNaN)
+    if (isNaN(lat) || isNaN(lng)) {
+      console.log('⚠️ ERROR GRAVE DE COORDENADAS RECIBIDAS:', { latStr, lngStr });
+
+      // Retornamos una coordenada por defecto segura (ej. La Paz) para que no crashee
+      return {
+        latitude: -16.528226,
+        longitude: -68.153575,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      };
+    }
+
+    // 4. Si todo está perfecto, retornamos la región real
+    return {
+      latitude: lat,
+      longitude: lng,
+      latitudeDelta: 0.015,
+      longitudeDelta: 0.015,
+    };
+  };
+
+
+
   return (
     <SafeAreaView style={tw`z-50 w-full`}>
       {/* Header del Navbar */}
@@ -408,50 +435,121 @@ const Navbar: React.FC = () => {
           </View>
         </View>
       )}
-
       <Modal
         visible={isZoneModalVisible}
         transparent
         animationType="slide"
         onRequestClose={() => setZoneModalVisible(false)}
       >
-        <View
-          style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}
-        >
-          <View
-            style={tw`bg-blue-sysintel-100 w-4/5 rounded-lg p-4 max-h-[70%]`}
-          >
-            <Text style={tw`mb-4 text-lg font-bold`}>Selecione a zona</Text>
-            <ScrollView>
-              {zones.map(zone => (
-                <TouchableOpacity
-                  key={zone.visitId}
-                  style={tw`py-2 border-b border-blue-sysintel-300`}
-                  onPress={() => {
-                    handleZoneChange(zone);
-                    setZoneModalVisible(false);
-                  }}
+        <View style={tw`items-center justify-center flex-1 bg-black bg-opacity-50`}>
+          <View style={tw`bg-blue-sysintel-100 w-11/12 rounded-lg overflow-hidden max-h-[90%]`}>
+
+            <Text style={tw`p-4 text-lg font-bold text-center text-blue-sysintel-900`}>
+              Zonas Asignadas
+            </Text>
+
+            {/* --- SECCIÓN DEL MAPA --- */}
+            <View style={tw`w-full h-64 border-b border-blue-sysintel-300`}>
+              {zones.length > 0 ? (
+                <MapView
+                  ref={mapRef}
+                  style={tw`w-full h-full`}
+                  provider={PROVIDER_GOOGLE}
+                  // Si hay una zona seleccionada, centra la cámara en ella. Si no, usa la primera de la lista.
+                  initialRegion={getSafeRegion()}
                 >
-                  <Text style={tw`text-base text-blue-sysintel-700`}>
-                    {zone.sectorGroup} - {zone.groupName} (
-                    <Text style={tw`text-[12px] text-blue-sysintel-700`}>
-                      {formatDate(zone.startDate)}
-                    </Text>
-                    {' - '}
-                    <Text style={tw`text-[12px] text-blue-sysintel-700`}>
-                      {formatDate(zone.endDate)}
-                    </Text>
-                    )
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                  {zones.map((zone) => {
+                    const polyCoords = getFormattedCoordinates(zone.coordinates);
+                    // Destacar visualmente la zona si es la seleccionada
+                    const isSelected = selectedZone?.visitId === zone.visitId;
+
+                    return (
+                      <React.Fragment key={`map-zone-${zone.visitId}`}>
+                        {/* Dibuja el polígono si el sector tiene coordenadas guardadas */}
+                        {polyCoords.length > 0 && (
+                          <Polygon
+                            coordinates={polyCoords}
+                            fillColor={isSelected ? 'rgba(59, 130, 246, 0.4)' : 'rgba(156, 163, 175, 0.3)'} // Azul si está seleccionado, gris si no
+                            strokeColor={isSelected ? 'rgba(37, 99, 235, 1)' : 'rgba(107, 114, 128, 1)'}
+                            strokeWidth={2}
+                          />
+                        )}
+
+                        {/* Pin central de la zona */}
+                        <Marker
+                          coordinate={{
+                            latitude: parseFloat(zone.latitude),
+                            longitude: parseFloat(zone.longitude),
+                          }}
+                          title={zone.sectorGroup}
+                          description={zone.groupName}
+                          onPress={() => setSelectedZoneState(zone)}
+                        />
+                      </React.Fragment>
+                    );
+                  })}
+                </MapView>
+              ) : (
+                <View style={tw`items-center justify-center flex-1 bg-gray-200`}>
+                  <Text style={tw`text-gray-500`}>Cargando mapa...</Text>
+                </View>
+              )}
+            </View>
+
+            {/* --- SECCIÓN DE LA LISTA --- */}
+            <ScrollView style={tw`p-4 mb-2`}>
+              {zones.map(zone => {
+                const isSelected = selectedZone?.visitId === zone.visitId;
+
+                return (
+                  <TouchableOpacity
+                    key={`list-${zone.visitId}`}
+                    style={tw`py-3 border-b border-blue-sysintel-200 flex-row justify-between items-center ${isSelected ? 'bg-blue-sysintel-200 rounded px-2' : ''}`}
+                    onPress={() => {
+                      // Al tocar, la seleccionamos para que el mapa se mueva hacia ella
+                      setSelectedZoneState(zone);
+                      // Si quieres que el modal se cierre al instante, descomenta la siguiente línea:
+                      // handleZoneChange(zone); setZoneModalVisible(false);
+                    }}
+                  >
+                    <View>
+                      <Text style={tw`text-base font-semibold text-blue-sysintel-800`}>
+                        {zone.sectorGroup}
+                      </Text>
+                      <Text style={tw`text-sm text-blue-sysintel-600`}>
+                        {zone.groupName}
+                      </Text>
+                      <Text style={tw`text-[11px] text-blue-sysintel-500 mt-1`}>
+                        {formatDate(zone.startDate)} - {formatDate(zone.endDate)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
-            <TouchableOpacity
-              onPress={() => setZoneModalVisible(false)}
-              style={tw`self-end mt-4`}
-            >
-              <Text style={tw`text-blue-sysintel-500`}>Cancelar</Text>
-            </TouchableOpacity>
+
+            {/* --- BOTÓN DE ACCIÓN --- */}
+            <View style={tw`flex-row border-t border-blue-sysintel-300`}>
+              <TouchableOpacity
+                onPress={() => setZoneModalVisible(false)}
+                style={tw`flex-1 p-4 items-center border-r border-blue-sysintel-300`}
+              >
+                <Text style={tw`text-gray-500 font-bold`}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  if (selectedZone) {
+                    handleZoneChange(selectedZone);
+                    setZoneModalVisible(false);
+                  }
+                }}
+                style={tw`flex-1 p-4 items-center bg-blue-sysintel-500`}
+              >
+                <Text style={tw`text-white font-bold`}>Confirmar</Text>
+              </TouchableOpacity>
+            </View>
+
           </View>
         </View>
       </Modal>
@@ -493,38 +591,7 @@ const Navbar: React.FC = () => {
           </View>
         </View>
       </Modal>
-      {/* 
-      <Modal visible={showGpsModal} transparent animationType="fade">
-        <View style={tw`items-center justify-center flex-1 bg-black/60`}>
-          <View style={tw`bg-white w-4/5 p-6 rounded-xl`}>
-            <Text style={tw`text-lg font-bold text-center`}>
-              Permiso de ubicación desactivado
-            </Text>
 
-            <Text style={tw`mt-3 text-center`}>
-              Debes habilitar el permiso de ubicación para continuar.
-            </Text>
-
-            <TouchableOpacity
-              style={tw`mt-6 bg-blue-500 p-3 rounded`}
-              onPress={openAppSettings}
-            >
-              <Text style={tw`text-center text-white font-semibold`}>
-                Abrir configuración
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={tw`mt-3 border border-blue-500 p-3 rounded`}
-              onPress={recheckGps}
-            >
-              <Text style={tw`text-center text-blue-600 font-semibold`}>
-                Ya di el permiso
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal> */}
 
       {/* Menu desplegable del Navbar */}
       {isOpen && (

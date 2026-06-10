@@ -33,7 +33,7 @@ export const fetchAxiosToken = async ({
     method,
     body,
     subdomain,
-    isFormData,
+    /*   isFormData, */
     headers,
   });
   const { data } = await axios({

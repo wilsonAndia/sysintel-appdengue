@@ -65,7 +65,7 @@ const Login: React.FC = () => {
       });
       return;
     }
-    console.log('API_URLlllll', API_URL);
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(input.correo.trim())) {
       Toast.show({
@@ -79,7 +79,7 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      console.log(`${API_URL}users/loginAppp`);
+      console.log(`${API_URL}user/loginAppp`);
       const response = await axios.post(`${API_URL}users/loginApp`, {
         email: input.correo.trim().toLowerCase(),
         password: input.password,
