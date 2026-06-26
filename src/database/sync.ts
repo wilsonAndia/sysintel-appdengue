@@ -59,27 +59,50 @@ export async function syncDataWithNestJS(
       });
 
       const isFirstSync = !sectorLastPulledAt;
-      const rawCreated = data.changes.houses.created || [];
-      const rawUpdated = data.changes.houses.updated || [];
-      const rawDeleted = data.changes.houses.deleted || [];
-      []
-      let safeCreated = [];
-      let safeUpdated = [];
-      let safeDeleted = [];
 
       // ESCUDO: Si es la primera vez, TODO es "created". Evitamos el error 7-1-1.
-      if (isFirstSync) {
-        safeCreated = [...rawCreated, ...rawUpdated].map(mapHouse);
-        safeUpdated = [];
-        safeDeleted = [];
-      } else {
-        safeCreated = rawCreated.map(mapHouse);
-        safeUpdated = rawUpdated.map(mapHouse);
-        safeDeleted = rawDeleted;
-      }
+      const processTable = (tableData: any, mapFn: (item: any) => any = (i) => i) => {
+        if (!tableData) return { created: [], updated: [], deleted: [] };
+        const rawCreated = tableData.created || [];
+        const rawUpdated = tableData.updated || [];
+        const rawDeleted = tableData.deleted || [];
+
+        if (isFirstSync) {
+          return {
+            created: [...rawCreated, ...rawUpdated].map(mapFn),
+            updated: [],
+            deleted: [],
+          };
+        } else {
+          return {
+            created: rawCreated.map(mapFn),
+            updated: rawUpdated.map(mapFn),
+            deleted: rawDeleted,
+          };
+        }
+      };
+
+      const mapInspection = (i: any) => ({
+        ...i,
+        latitude: i.latitude != null ? Number(i.latitude) : null,
+        longitude: i.longitude != null ? Number(i.longitude) : null,
+      });
+
+      const mapMedia = (m: any) => ({
+        ...m,
+        latitude: m.latitude != null ? Number(m.latitude) : null,
+        longitude: m.longitude != null ? Number(m.longitude) : null,
+      });
+
+      const safeHouses = processTable(data.changes.houses, mapHouse);
+      const safeInspections = processTable(data.changes.inspections, mapInspection);
+      const safePets = processTable(data.changes.inspection_pets);
+      const safePools = processTable(data.changes.inspection_pool_conditions);
+      const safeBldgChars = processTable(data.changes.inspection_building_characteristics);
+      const safeMedia = processTable(data.changes.inspection_media, mapMedia);
 
       console.log(
-        `✅ PULL Listo. C: ${safeCreated.length}, U: ${safeUpdated.length}, D: ${safeDeleted.length}`,
+        `✅ PULL Listo. Houses C: ${safeHouses.created.length}, U: ${safeHouses.updated.length}, D: ${safeHouses.deleted.length}`,
       );
 
       const newTimestamp = Number(data.timestamp) || new Date().getTime();
@@ -87,12 +110,13 @@ export async function syncDataWithNestJS(
 
       return {
         changes: {
-          ...data.changes, // Pasar también las inspecciones y otras tablas
-          houses: {
-            created: safeCreated,
-            updated: safeUpdated,
-            deleted: safeDeleted,
-          },
+          ...data.changes, // Pasar también otras tablas si existen
+          houses: safeHouses,
+          inspections: safeInspections,
+          inspection_pets: safePets,
+          inspection_pool_conditions: safePools,
+          inspection_building_characteristics: safeBldgChars,
+          inspection_media: safeMedia,
         },
         timestamp: newTimestamp,
       };

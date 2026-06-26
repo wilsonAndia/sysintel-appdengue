@@ -55,17 +55,26 @@ function App(): React.JSX.Element {
     const loadToken = async () => {
       try {
         const token = await AsyncStorage.getItem('token');
+        const userStr = await AsyncStorage.getItem('user');
 
         if (token) {
           dispatch(setToken(token));
 
-          const response: ApiResponse = await fetchAxiosToken({
-            url: `users/getOne/token`,
-            method: 'post',
-          });
-          /*  console.log(response); */
-          dispatch(
-            setUser({
+          if (userStr) {
+            try {
+              dispatch(setUser(JSON.parse(userStr)));
+            } catch (e) {
+              console.error('Error parsing cached user', e);
+            }
+          }
+
+          try {
+            const response: ApiResponse = await fetchAxiosToken({
+              url: `users/getOne/token`,
+              method: 'post',
+            });
+            /*  console.log(response); */
+            const userData = {
               id: response.payload.id,
               firstName: response.payload.firstName,
               lastName: response.payload.lastName,
@@ -74,8 +83,12 @@ function App(): React.JSX.Element {
               avatar: response.payload.avatar,
               first_login: response.payload.first_login,
               subdomain: response.payload.subdomain,
-            }),
-          );
+            };
+            dispatch(setUser(userData));
+            await AsyncStorage.setItem('user', JSON.stringify(userData));
+          } catch (networkError) {
+            console.log('Error fetching user from network (might be offline):', networkError);
+          }
         }
       } catch (error) {
         console.error('Error al cargar el token:', error);

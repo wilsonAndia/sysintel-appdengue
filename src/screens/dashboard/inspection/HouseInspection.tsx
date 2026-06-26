@@ -338,25 +338,30 @@ const HouseInspection = () => {
     return () => backHandler.remove();
   }, [isZoneModalVisible]);
 
-  const syncNow = async () => {
+  const syncNow = async (silent = false) => {
     if (!zone?.sectorId || !location?.latitude || !location?.longitude) {
-      Alert.alert(
-        'Atenção',
-        'Precisamos da sua localização e da zona para sincronizar.',
-      );
+      if (!silent) {
+        Alert.alert(
+          'Atenção',
+          'Precisamos da sua localização e da zona para sincronizar.',
+        );
+      }
       return;
     }
 
-    try {
-      Alert.alert(
-        'Sincronizando...',
-        'Subindo fotos e dados. Aguarde um momento.',
-      );
+    const connected = await hasInternet();
+    if (!connected) return;
 
-      // 1. PASO NUEVO: Subimos las fotos a AWS primero y cambiamos los nombres
+    try {
+      if (!silent) {
+        Alert.alert(
+          'Sincronizando...',
+          'Subindo fotos e dados. Aguarde um momento.',
+        );
+      }
+
       await uploadPendingMedia();
 
-      // 2. PASO VIEJO: Sincronizamos el texto con NestJS (que ahora llevará los nombres correctos de las fotos)
       await syncDataWithNestJS(
         userRedux?.subdomain || '',
         zone.sectorId,
@@ -364,15 +369,26 @@ const HouseInspection = () => {
         location.longitude,
       );
 
-      Alert.alert('Sucesso!', 'Os dados foram sincronizados com o servidor.');
+      if (!silent) {
+        Alert.alert('Sucesso!', 'Os dados foram sincronizados com o servidor.');
+      }
     } catch (error) {
       console.error('Erro de sincronização:', error);
-      Alert.alert(
-        'Erro',
-        'Houve um problema ao sincronizar os dados. Tente novamente mais tarde.',
-      );
+      if (!silent) {
+        Alert.alert(
+          'Erro',
+          'Houve um problema ao sincronizar os dados. Tente novamente mais tarde.',
+        );
+      }
     }
   };
+
+  useEffect(() => {
+    // Sincronizar automáticamente cuando tenemos ubicación y zona
+    if (zone?.sectorId && location?.latitude && location?.longitude) {
+      syncNow(true);
+    }
+  }, [zone?.sectorId, location?.latitude, location?.longitude]);
 
   return (
     <SafeAreaView style={tw`w-full h-full bg-white `}>
@@ -387,14 +403,6 @@ const HouseInspection = () => {
             Inspeção de Casas
           </Text>
           <View style={tw`flex-row items-center`}>
-            {/* === Botón sincronizar === */}
-            <TouchableOpacity
-              onPress={syncNow}
-              style={tw`px-4 py-2 rounded-lg mr-2 bg-green-700`}
-            >
-              <Text style={tw`text-white font-bold`}>Sync</Text>
-            </TouchableOpacity>
-
             {/* === Botón Criar Casa === */}
             <TouchableOpacity
               style={tw.style(

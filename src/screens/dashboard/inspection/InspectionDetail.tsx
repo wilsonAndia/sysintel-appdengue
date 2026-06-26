@@ -16,6 +16,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
 import Video from 'react-native-video';
 import { API_URL } from '@env';
+import { database } from '../../../database';
+import InspectionWM from '../../../database/models/Inspections';
 
 type InspectionDetailRouteProp = RouteProp<
   { InspectionDetail: { id: string } },
@@ -78,6 +80,7 @@ const InspectionDetail: React.FC = () => {
 
   const getInspectionDetail = async () => {
     setLoading(true);
+    let apiSuccess = false;
     try {
       const response = await fetchAxiosToken({
         url: `inspections/get-one/${id}`,
@@ -86,14 +89,70 @@ const InspectionDetail: React.FC = () => {
 
       if (response.statusCode === 200) {
         setInspection(response.payload);
+        apiSuccess = true;
       } else {
         console.log('Erro:', response.message);
       }
     } catch (error) {
-      console.log('Erro:', error);
-    } finally {
-      setLoading(false);
+      console.log('Erro API (offline?):', error);
     }
+
+    if (!apiSuccess) {
+      try {
+        const localInspection = await database.get<InspectionWM>('inspections').find(id);
+        const localHouse: any = await localInspection.house.fetch();
+        const localPets = await localInspection.pets.fetch();
+        const localPoolConditions = await localInspection.poolConditions.fetch();
+        const localBuildingChars = await localInspection.buildingCharacteristics.fetch();
+        const localMedia = await localInspection.media.fetch();
+
+        const mappedInspection: Inspection = {
+          id: localInspection.id,
+          numberOfAdults: localInspection.numberOfAdults,
+          numberOfChildren: localInspection.numberOfChildren,
+          underConstruction: localInspection.underConstruction,
+          constructionDetails: localInspection.constructionDetails || '',
+          someoneAtHome: localInspection.someoneAtHome,
+          latitude: String(localInspection.latitude),
+          longitude: String(localInspection.longitude),
+          startTime: localInspection.startTime ? localInspection.startTime.toISOString() : '',
+          endTime: localInspection.endTime ? localInspection.endTime.toISOString() : '',
+          hasPets: localInspection.hasPets,
+          petTypes: localPets.map((p: any) => p.petTypeId), // Guardado como ID offline
+          hasPool: localInspection.hasPool,
+          poolCondition: localPoolConditions.map((pc: any) => pc.poolConditionTypeId), // Guardado como ID offline
+          buildingCharacteristics: localBuildingChars.map((bc: any) => bc.buildingCharacteristicTypeId), // Guardado como ID offline
+          neighborCharacteristics: {
+            neighbor1: localInspection.neighbor1 || '',
+            neighbor2: localInspection.neighbor2 || '',
+            neighbor3: localInspection.neighbor3 || '',
+          },
+          hasDengueFoci: localInspection.hasDengueFoci,
+          inspectionDate: localInspection.inspectionDate.toISOString(),
+          house: {
+            id: localHouse.id,
+            neighborhood: localHouse.neighborhood,
+            street: localHouse.street,
+            number: localHouse.number,
+            complement: localHouse.complement || '',
+            latitude: String(localHouse.latitude),
+            longitude: String(localHouse.longitude),
+            responsible: localHouse.responsible,
+          },
+          media: localMedia.map((m: any) => ({
+            id: m.id,
+            url: m.url,
+            type: m.type as 'image' | 'video',
+            larvaeDetails: m.larvaeDetails,
+          }))
+        };
+
+        setInspection(mappedInspection);
+      } catch (dbError) {
+        console.log('Error buscando en BD local:', dbError);
+      }
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -101,6 +160,11 @@ const InspectionDetail: React.FC = () => {
   }, []);
 
   const getMediaUrl = async (media: Media): Promise<string> => {
+    // Si la foto es local (offline), la mostramos directamente
+    if (media.url.startsWith('file://') || media.url.startsWith('content://')) {
+      return media.url;
+    }
+
     if (media.type === 'video') {
       try {
         const response = await fetchAxiosToken({
@@ -191,6 +255,30 @@ const InspectionDetail: React.FC = () => {
               Alguém em casa: {inspection?.someoneAtHome ? 'Sim' : 'Não'}
             </Text>
 
+            <Text style={tw`text-blue-sysintel-800`}>
+              Animais de estimação: {inspection?.hasPets ? 'Sim' : 'Não'}
+            </Text>
+            {inspection?.hasPets && inspection.petTypes && inspection.petTypes.length > 0 && (
+              <Text style={tw`text-blue-sysintel-800`}>
+                Tipos de animais: {inspection.petTypes.join(', ')}
+              </Text>
+            )}
+
+            <Text style={tw`text-blue-sysintel-800`}>
+              Piscina: {inspection?.hasPool ? 'Sim' : 'Não'}
+            </Text>
+            {inspection?.hasPool && inspection.poolCondition && inspection.poolCondition.length > 0 && (
+              <Text style={tw`text-blue-sysintel-800`}>
+                Condição da piscina: {inspection.poolCondition.join(', ')}
+              </Text>
+            )}
+
+            {inspection?.buildingCharacteristics && inspection.buildingCharacteristics.length > 0 && (
+              <Text style={tw`text-blue-sysintel-800 mt-2`}>
+                Características do imóvel: {inspection.buildingCharacteristics.join(', ')}
+              </Text>
+            )}
+
             <Text style={tw`mt-4 text-lg font-bold text-blue-sysintel-900`}>
               Características dos vizinhos
             </Text>
@@ -241,7 +329,10 @@ const InspectionDetail: React.FC = () => {
                       {media.type === 'image' ? (
                         <Image
                           source={{
-                            uri: `${API_URL}inspections/getImage/${media.url}`,
+                            uri:
+                              media.url.startsWith('file://') || media.url.startsWith('content://')
+                                ? media.url
+                                : `${API_URL}inspections/getImage/${media.url}`,
                           }}
                           style={tw`w-32 h-32 rounded-lg`}
                           resizeMode="cover"

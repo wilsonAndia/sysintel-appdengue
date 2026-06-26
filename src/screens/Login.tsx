@@ -84,7 +84,7 @@ const Login: React.FC = () => {
         email: input.correo.trim().toLowerCase(),
         password: input.password,
       });
-
+      console.log('response', response);
       const data = response.data;
       console.log('data', data);
       if (data.message === 'Ok') {
@@ -92,6 +92,7 @@ const Login: React.FC = () => {
         dispatch(setUser(user));
         dispatch(setToken(accessToken));
         await AsyncStorage.setItem('token', accessToken);
+        await AsyncStorage.setItem('user', JSON.stringify(user));
         setLoading(false);
         Dialog.show({
           type: ALERT_TYPE.SUCCESS,

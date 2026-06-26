@@ -37,9 +37,8 @@ export const uploadPendingMedia = async () => {
       formData.append('inspection', {
         uri: media.url,
         type: media.type === 'image' ? 'image/jpeg' : 'video/mp4',
-        name: `offline_upload_${Date.now()}.${
-          media.type === 'image' ? 'jpg' : 'mp4'
-        }`,
+        name: `offline_upload_${Date.now()}.${media.type === 'image' ? 'jpg' : 'mp4'
+          }`,
       } as any);
 
       // LLAMAMOS AL ENDPOINT QUE CREASTE EN NESTJS
@@ -52,7 +51,7 @@ export const uploadPendingMedia = async () => {
         },
         body: formData,
       });
-
+      console.log("response de subida: ", response)
       if (response.ok) {
         const data = await response.json();
         const awsFileName = data.fileName; // NestJS nos devuelve el nombre guardado en S3
@@ -70,7 +69,7 @@ export const uploadPendingMedia = async () => {
         );
       }
     } catch (error) {
-      console.error(`❌ Error de red subiendo foto:`, error);
+      console.error(`❌ Error de red subiendo foto:`, error, media.url);
     }
   }
 };
