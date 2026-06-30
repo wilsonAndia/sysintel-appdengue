@@ -1,5 +1,68 @@
 import { database } from '../index';
+import { Q } from '@nozbe/watermelondb';
 import uuid from 'react-native-uuid';
+
+export interface InspectionPrefillData {
+  numberOfAdults: string;
+  numberOfChildren: string;
+  underConstruction: boolean;
+  constructionDetails: string;
+  hasPets: boolean;
+  petTypes: string[];
+  hasPool: boolean;
+  poolCondition: string[];
+  buildingCharacteristics: string[];
+  neighborCharacteristics: {
+    neighbor1: string;
+    neighbor2: string;
+    neighbor3: string;
+  };
+}
+
+export const getLastCompletedInspectionPrefill = async (
+  houseId: string,
+): Promise<InspectionPrefillData | null> => {
+  const [lastInspection]: any[] = await database
+    .get('inspections')
+    .query(
+      Q.where('house_id', houseId),
+      Q.where('someone_at_home', true),
+      Q.sortBy('inspection_date', Q.desc),
+      Q.take(1),
+    )
+    .fetch();
+
+  if (!lastInspection) return null;
+
+  const [pets, poolConditions, buildingCharacteristics] = await Promise.all([
+    lastInspection.pets.fetch(),
+    lastInspection.poolConditions.fetch(),
+    lastInspection.buildingCharacteristics.fetch(),
+  ]);
+
+  return {
+    numberOfAdults: String(lastInspection.numberOfAdults ?? ''),
+    numberOfChildren: String(lastInspection.numberOfChildren ?? ''),
+    underConstruction: Boolean(lastInspection.underConstruction),
+    constructionDetails: lastInspection.constructionDetails || '',
+    hasPets: Boolean(lastInspection.hasPets),
+    petTypes: lastInspection.hasPets
+      ? pets.map((pet: any) => pet.petTypeId)
+      : [],
+    hasPool: Boolean(lastInspection.hasPool),
+    poolCondition: lastInspection.hasPool
+      ? poolConditions.map((pool: any) => pool.poolConditionTypeId)
+      : [],
+    buildingCharacteristics: buildingCharacteristics.map(
+      (char: any) => char.buildingCharacteristicTypeId,
+    ),
+    neighborCharacteristics: {
+      neighbor1: lastInspection.neighbor1 || '',
+      neighbor2: lastInspection.neighbor2 || '',
+      neighbor3: lastInspection.neighbor3 || '',
+    },
+  };
+};
 
 // 🍉 1. GUARDAR INSPECCIÓN: NO HABÍA NADIE
 export const saveNoOneAtHomeInspection = async (

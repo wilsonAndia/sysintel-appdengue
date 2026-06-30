@@ -1,13 +1,16 @@
 import { synchronize } from '@nozbe/watermelondb/sync';
+import { Q } from '@nozbe/watermelondb';
 import { database } from './index';
 import { fetchAxiosToken } from '../helpers/fetchAxiosToken';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const FULL_SECTOR_SYNC_VERSION = 'full-sector-cache-v1';
+
 export async function syncDataWithNestJS(
   subdomainName: string,
   sectorId: string,
-  lat: number,
-  lng: number,
+  lat?: number | null,
+  lng?: number | null,
 ) {
   await synchronize({
     database,
@@ -15,19 +18,42 @@ export async function syncDataWithNestJS(
     // ==========================================
     // 1. PULL (Descargar del servidor)
     // ==========================================
-    pullChanges: async ({ lastPulledAt }) => {
+    pullChanges: async () => {
       // Usar AsyncStorage para llevar un lastPulledAt POR SECTOR
       const storedTimestamp = await AsyncStorage.getItem(`sync_${sectorId}`);
-      const sectorLastPulledAt = storedTimestamp ? Number(storedTimestamp) : 0;
+      const syncVersionKey = `sync_version_${sectorId}`;
+      const storedSyncVersion = await AsyncStorage.getItem(syncVersionKey);
+      const shouldReconcileFullSector =
+        storedSyncVersion !== FULL_SECTOR_SYNC_VERSION;
+      const sectorLastPulledAt =
+        storedTimestamp && !shouldReconcileFullSector
+          ? Number(storedTimestamp)
+          : 0;
 
       console.log(
         `⬇️ Iniciando PULL... (Último sync de este sector: ${sectorLastPulledAt || 'NUNCA'})`,
       );
 
+      const pullBody: any = {
+        lastPulledAt: sectorLastPulledAt,
+        subdomainName,
+        sectorId,
+      };
+
+      if (
+        lat !== undefined &&
+        lat !== null &&
+        lng !== undefined &&
+        lng !== null
+      ) {
+        pullBody.lat = lat;
+        pullBody.lng = lng;
+      }
+
       const response = await fetchAxiosToken({
         url: 'sync/pull',
         method: 'post',
-        body: { lastPulledAt: sectorLastPulledAt, subdomainName, sectorId, lat, lng },
+        body: pullBody,
         subdomain: subdomainName,
       });
 
@@ -58,28 +84,58 @@ export async function syncDataWithNestJS(
           : new Date().getTime(),
       });
 
-      const isFirstSync = !sectorLastPulledAt;
+      const findExistingIds = async (tableName: string, ids: string[]) => {
+        if (ids.length === 0) return new Set<string>();
 
-      // ESCUDO: Si es la primera vez, TODO es "created". Evitamos el error 7-1-1.
-      const processTable = (tableData: any, mapFn: (item: any) => any = (i) => i) => {
+        const existingIds = new Set<string>();
+        const chunkSize = 500;
+
+        for (let index = 0; index < ids.length; index += chunkSize) {
+          const idsChunk = ids.slice(index, index + chunkSize);
+          const records = await database.collections
+            .get(tableName as any)
+            .query(Q.where('id', Q.oneOf(idsChunk)))
+            .fetch();
+
+          records.forEach(record => existingIds.add(record.id));
+        }
+
+        return existingIds;
+      };
+
+      const processTable = async (
+        tableName: string,
+        tableData: any,
+        mapFn: (item: any) => any = i => i,
+      ) => {
         if (!tableData) return { created: [], updated: [], deleted: [] };
         const rawCreated = tableData.created || [];
         const rawUpdated = tableData.updated || [];
         const rawDeleted = tableData.deleted || [];
 
-        if (isFirstSync) {
+        if (shouldReconcileFullSector) {
+          const mappedUpserts = [...rawCreated, ...rawUpdated].map(mapFn);
+          const existingIds = await findExistingIds(
+            tableName,
+            mappedUpserts.map((item: any) => item.id),
+          );
+
           return {
-            created: [...rawCreated, ...rawUpdated].map(mapFn),
-            updated: [],
-            deleted: [],
-          };
-        } else {
-          return {
-            created: rawCreated.map(mapFn),
-            updated: rawUpdated.map(mapFn),
+            created: mappedUpserts.filter(
+              (item: any) => !existingIds.has(item.id),
+            ),
+            updated: mappedUpserts.filter((item: any) =>
+              existingIds.has(item.id),
+            ),
             deleted: rawDeleted,
           };
         }
+
+        return {
+          created: rawCreated.map(mapFn),
+          updated: rawUpdated.map(mapFn),
+          deleted: rawDeleted,
+        };
       };
 
       const mapInspection = (i: any) => ({
@@ -94,12 +150,33 @@ export async function syncDataWithNestJS(
         longitude: m.longitude != null ? Number(m.longitude) : null,
       });
 
-      const safeHouses = processTable(data.changes.houses, mapHouse);
-      const safeInspections = processTable(data.changes.inspections, mapInspection);
-      const safePets = processTable(data.changes.inspection_pets);
-      const safePools = processTable(data.changes.inspection_pool_conditions);
-      const safeBldgChars = processTable(data.changes.inspection_building_characteristics);
-      const safeMedia = processTable(data.changes.inspection_media, mapMedia);
+      const safeHouses = await processTable(
+        'houses',
+        data.changes.houses,
+        mapHouse,
+      );
+      const safeInspections = await processTable(
+        'inspections',
+        data.changes.inspections,
+        mapInspection,
+      );
+      const safePets = await processTable(
+        'inspection_pets',
+        data.changes.inspection_pets,
+      );
+      const safePools = await processTable(
+        'inspection_pool_conditions',
+        data.changes.inspection_pool_conditions,
+      );
+      const safeBldgChars = await processTable(
+        'inspection_building_characteristics',
+        data.changes.inspection_building_characteristics,
+      );
+      const safeMedia = await processTable(
+        'inspection_media',
+        data.changes.inspection_media,
+        mapMedia,
+      );
 
       console.log(
         `✅ PULL Listo. Houses C: ${safeHouses.created.length}, U: ${safeHouses.updated.length}, D: ${safeHouses.deleted.length}`,
@@ -107,6 +184,7 @@ export async function syncDataWithNestJS(
 
       const newTimestamp = Number(data.timestamp) || new Date().getTime();
       await AsyncStorage.setItem(`sync_${sectorId}`, newTimestamp.toString());
+      await AsyncStorage.setItem(syncVersionKey, FULL_SECTOR_SYNC_VERSION);
 
       return {
         changes: {

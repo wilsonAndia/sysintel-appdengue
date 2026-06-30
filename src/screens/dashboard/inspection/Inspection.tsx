@@ -11,28 +11,22 @@ import {
   Image,
   ActivityIndicator,
   useWindowDimensions,
-  Platform,
 } from 'react-native';
 import tw from '../../../../tailwind';
-import * as ImagePicker from 'react-native-image-picker';
 import Geolocation from '@react-native-community/geolocation';
 import { launchCamera, CameraOptions } from 'react-native-image-picker';
 import Navbar from '../../../components/NavBar';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationProp } from '../../../helpers/types/navigationProp';
 import { ButtonRegresar } from '../../../helpers/ButtonRegresar';
 import Video from 'react-native-video';
 import ImageViewer from 'react-native-image-viewing';
 import ToggleButton from '../../../helpers/ToggleButton';
-import { fetchAxiosToken } from '../../../helpers/fetchAxiosToken';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../redux/store';
-import { API_URL } from '@env';
 
-import { hasInternet } from '../../../helpers/checkConnection';
 import {
+  getLastCompletedInspectionPrefill,
   saveFullInspection,
   saveNoOneAtHomeInspection,
 } from '../../../database/services/inspectionService';
@@ -48,20 +42,6 @@ interface MediaFile {
   larvaeDetails: string;
   latitude: number;
   longitude: number;
-}
-
-interface InspectionData {
-  houseId: string;
-  numberOfAdults: string;
-  numberOfChildren: string;
-  underConstruction: boolean;
-  constructionDetails: string;
-  latitude: number;
-  longitude: number;
-  startTime: string;
-  endTime: string;
-  hasDengueFoci: boolean;
-  mediaFiles: MediaFile[];
 }
 
 const Inspection: React.FC = () => {
@@ -82,7 +62,6 @@ const Inspection: React.FC = () => {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<string | null>(null);
-  const [endTime, setEndTime] = useState<string | null>(null);
   const [hasDengueFoci, setHasDengueFoci] = useState<boolean>(false);
   const [hasPets, setHasPets] = useState<boolean>(false);
   const [petTypes, setPetTypes] = useState<string[]>([]);
@@ -101,6 +80,7 @@ const Inspection: React.FC = () => {
   });
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [prefillLoading, setPrefillLoading] = useState<boolean>(true);
   const [previewModal, setPreviewModal] = useState<boolean>(false);
   const [previewFile, setPreviewFile] = useState<MediaFile | null>(null);
   const [tempLarvaeDetails, setTempLarvaeDetails] = useState<string>('');
@@ -126,6 +106,43 @@ const Inspection: React.FC = () => {
   useEffect(() => {
     getLocation();
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInspectionPrefill = async () => {
+      try {
+        const prefill = await getLastCompletedInspectionPrefill(houseId);
+
+        if (!isMounted || !prefill) return;
+
+        setNumberOfAdults(prefill.numberOfAdults);
+        setNumberOfChildren(prefill.numberOfChildren);
+        setUnderConstruction(prefill.underConstruction);
+        setConstructionDetails(prefill.constructionDetails);
+        setHasPets(prefill.hasPets);
+        setPetTypes(prefill.petTypes);
+        setHasPool(prefill.hasPool);
+        setPoolCondition(prefill.poolCondition);
+        setBuildingCharacteristics(prefill.buildingCharacteristics);
+        setNeighborCharacteristics(prefill.neighborCharacteristics);
+        setHasDengueFoci(false);
+        setMediaFiles([]);
+      } catch (error) {
+        console.log('Error loading inspection prefill:', error);
+      } finally {
+        if (isMounted) {
+          setPrefillLoading(false);
+        }
+      }
+    };
+
+    loadInspectionPrefill();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [houseId]);
 
   // =======================================================
   // 1. INICIAR INSPECCIÓN (HÍBRIDO)
@@ -233,15 +250,18 @@ const Inspection: React.FC = () => {
         await new Promise<void>((resolve, reject) => {
           Geolocation.getCurrentPosition(
             position => {
-              const { latitude, longitude } = position.coords;
+              const {
+                latitude: mediaLatitude,
+                longitude: mediaLongitude,
+              } = position.coords;
 
               setPreviewFile({
                 uri: file.uri!,
                 type: file.type!,
                 name: file.fileName || `file_${Date.now()}`,
                 larvaeDetails: '',
-                latitude,
-                longitude,
+                latitude: mediaLatitude,
+                longitude: mediaLongitude,
               });
 
               setPreviewModal(true);
@@ -291,7 +311,7 @@ const Inspection: React.FC = () => {
       <View style={tw`px-4 mt-10 `}>
         <ButtonRegresar textColor="white" arrowColor="white" />
       </View>
-      {!latitude && !longitude ? (
+      {(!latitude && !longitude) || prefillLoading ? (
         <View style={tw`items-center justify-center flex-1`}>
           <ActivityIndicator size="large" color="#17375e" />
           <Text style={tw`mt-2 text-blue-sysintel-800`}>Carregando ...</Text>

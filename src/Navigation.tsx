@@ -50,9 +50,11 @@ const Navigation = () => {
   useEffect(() => {
     // Solo se llama una vez para establecer el estado de carga
 
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       setLoading(false);
     }, 1000);
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   if (loading) {

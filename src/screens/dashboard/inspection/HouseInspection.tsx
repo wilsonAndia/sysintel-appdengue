@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   SafeAreaView,
@@ -34,6 +34,61 @@ import withObservables from '@nozbe/with-observables';
 import House from '../../../database/models/House';
 import { observeHousesBySector } from '../../../database/services/houseService';
 import { uploadPendingMedia } from '../../../database/services/syncManager';
+
+const PAGE_SIZE = 30;
+
+type Coordinates = {
+  latitude: number;
+  longitude: number;
+};
+
+const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const getDistanceInMeters = (
+  from: Coordinates,
+  to: Coordinates,
+): number => {
+  const earthRadiusInMeters = 6371000;
+  const deltaLat = toRadians(to.latitude - from.latitude);
+  const deltaLng = toRadians(to.longitude - from.longitude);
+  const fromLat = toRadians(from.latitude);
+  const toLat = toRadians(to.latitude);
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(fromLat) *
+      Math.cos(toLat) *
+      Math.sin(deltaLng / 2) *
+      Math.sin(deltaLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return earthRadiusInMeters * c;
+};
+
+const getHouseDistance = (location: Coordinates, house: House) => {
+  const latitude = Number(house.latitude);
+  const longitude = Number(house.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return getDistanceInMeters(location, { latitude, longitude });
+};
+
+const compareHouseAddress = (a: House, b: House) => {
+  const streetCompare = (a.street || '').localeCompare(b.street || '');
+  if (streetCompare !== 0) return streetCompare;
+
+  const numberCompare = (a.number || '').localeCompare(
+    b.number || '',
+    undefined,
+    { numeric: true },
+  );
+  if (numberCompare !== 0) return numberCompare;
+
+  return (a.neighborhood || '').localeCompare(b.neighborhood || '');
+};
 
 // ============================================================================
 // PERMISOS ORIGINALES
@@ -135,11 +190,39 @@ const ReactiveHouseItem = withObservables(
 // ============================================================================
 const HouseList = ({
   houses,
+  location,
   navigation,
 }: {
   houses: House[];
+  location: Coordinates | null;
   navigation: any;
 }) => {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const sortedHouses = useMemo(() => {
+    const housesCopy = [...houses];
+
+    if (!location) {
+      return housesCopy.sort(compareHouseAddress);
+    }
+
+    return housesCopy.sort((a, b) => {
+      const distanceA = getHouseDistance(location, a);
+      const distanceB = getHouseDistance(location, b);
+
+      if (distanceA !== distanceB) return distanceA - distanceB;
+
+      return compareHouseAddress(a, b);
+    });
+  }, [houses, location]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [houses.length, location?.latitude, location?.longitude]);
+
+  const visibleHouses = sortedHouses.slice(0, visibleCount);
+  const hasMoreHouses = visibleCount < sortedHouses.length;
+
   if (houses.length === 0) {
     return (
       <View style={tw`items-center justify-start px-4 mt-8`}>
@@ -153,20 +236,26 @@ const HouseList = ({
   return (
     <FlatList
       style={tw`h-full p-2 rounded-lg`}
-      data={houses}
+      data={visibleHouses}
       keyExtractor={house => house.id}
       contentContainerStyle={tw`px-4 py-4 flex-grow`}
       // ¡Aquí usamos nuestro nuevo componente individual reactivo!
       renderItem={({ item }) => (
         <ReactiveHouseItem house={item} navigation={navigation} />
       )}
+      onEndReached={() => {
+        if (hasMoreHouses) {
+          setVisibleCount(current => current + PAGE_SIZE);
+        }
+      }}
+      onEndReachedThreshold={0.4}
       showsVerticalScrollIndicator={false}
     />
   );
 };
 
 const ReactiveHouseList = withObservables(
-  ['sectorId'],
+  ['sectorId', 'location'],
   ({ sectorId }: { sectorId: string }) => ({
     houses: observeHousesBySector(sectorId),
   }),
@@ -249,7 +338,7 @@ const HouseInspection = () => {
           longitude: position.coords.longitude,
         });
       },
-      error => {
+      _error => {
         Alert.alert('Erro', 'Não foi possível obter a localização atual.');
       },
       { enableHighAccuracy: false, timeout: 20000, maximumAge: 1000 },
@@ -336,14 +425,25 @@ const HouseInspection = () => {
       backAction,
     );
     return () => backHandler.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isZoneModalVisible]);
 
   const syncNow = async (silent = false) => {
-    if (!zone?.sectorId || !location?.latitude || !location?.longitude) {
+    if (!zone?.sectorId) {
       if (!silent) {
         Alert.alert(
           'Atenção',
-          'Precisamos da sua localização e da zona para sincronizar.',
+          'Precisamos da zona para sincronizar.',
+        );
+      }
+      return;
+    }
+
+    if (!userRedux?.subdomain) {
+      if (!silent) {
+        Alert.alert(
+          'Atenção',
+          'Não foi possível identificar o subdomínio do usuário.',
         );
       }
       return;
@@ -363,10 +463,10 @@ const HouseInspection = () => {
       await uploadPendingMedia();
 
       await syncDataWithNestJS(
-        userRedux?.subdomain || '',
+        userRedux.subdomain,
         zone.sectorId,
-        location.latitude,
-        location.longitude,
+        location?.latitude,
+        location?.longitude,
       );
 
       if (!silent) {
@@ -384,11 +484,12 @@ const HouseInspection = () => {
   };
 
   useEffect(() => {
-    // Sincronizar automáticamente cuando tenemos ubicación y zona
-    if (zone?.sectorId && location?.latitude && location?.longitude) {
+    // Sincronizar el sector completo; la ubicacion solo ordena el cache local.
+    if (zone?.sectorId && userRedux?.subdomain) {
       syncNow(true);
     }
-  }, [zone?.sectorId, location?.latitude, location?.longitude]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zone?.sectorId, userRedux?.subdomain]);
 
   return (
     <SafeAreaView style={tw`w-full h-full bg-white `}>
@@ -426,7 +527,11 @@ const HouseInspection = () => {
           </Text>
         </View>
       ) : zone?.sectorId ? (
-        <ReactiveHouseList sectorId={zone.sectorId} navigation={navigation} />
+        <ReactiveHouseList
+          sectorId={zone.sectorId}
+          location={location}
+          navigation={navigation}
+        />
       ) : (
         <View style={tw`items-center justify-center mt-8`}>
           <Text style={tw`text-lg text-center text-blue-sysintel-800`}>
